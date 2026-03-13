@@ -1,0 +1,11 @@
+name: edit_file
+fixture: basic_files
+prompt: |
+  Replace "TODO: replace-me" with "DONE: replaced" in beta.md.
+expect:
+  file_contains:
+    - path: beta.md
+      contains: "DONE: replaced"
+  file_not_contains:
+    - path: beta.md
+      contains: "TODO: replace-me"

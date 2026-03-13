@@ -1,0 +1,14 @@
+name: write_file
+fixture: basic_files
+prompt: |
+  Create gamma.txt containing exactly three lines:
+  one, two, and three.
+expect:
+  files_exist:
+    - gamma.txt
+  file_contains:
+    - path: gamma.txt
+      contains: |-
+        one
+        two
+        three

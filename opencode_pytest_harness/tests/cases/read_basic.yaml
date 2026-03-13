@@ -1,0 +1,7 @@
+name: read_basic
+fixture: basic_files
+prompt: Read alpha.txt and return the second line.
+expect:
+  stdout_contains:
+    - second line
+  files_unchanged: true

@@ -1,0 +1,8 @@
+name: glob_discovery
+fixture: basic_files
+prompt: List all .md and .py files in the workspace.
+expect:
+  stdout_contains:
+    - beta.md
+    - src/nested/sample.py
+  files_unchanged: true

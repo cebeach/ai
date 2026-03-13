@@ -1,0 +1,7 @@
+name: workflow_modify_function
+fixture: basic_files
+prompt: Find the Python file, read it, and modify greet() so it returns "hello, world".
+expect:
+  file_contains:
+    - path: src/nested/sample.py
+      contains: return "hello, world"
