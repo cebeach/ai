@@ -76,16 +76,6 @@ def write_snapshot_json(path: Path, data: dict[str, str]) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
 
 
-
-import os
-import re
-import shutil
-import time
-from pathlib import Path
-
-import pexpect
-
-
 ANSI_RE = re.compile(
     r"""
     \x1B[@-_][0-?]*[ -/]*[@-~]      |  # ESC / CSI sequences
@@ -114,8 +104,13 @@ def run_opencode_tui(
     max_permission_approvals: int = 5,
 ) -> dict:
 
+    transcript_parts: list[str] = []
+
     project_root = Path(__file__).resolve().parents[1]
+
+    tools_dir = project_root / "tools" / "opencode"
     test_opencode_json = project_root / "tools" / "opencode" / "opencode.json"
+    prompts_src = tools_dir / "prompts"
 
     if not test_opencode_json.exists():
         raise FileNotFoundError(f"Missing harness config: {test_opencode_json}")
@@ -131,10 +126,44 @@ def run_opencode_tui(
     opencode_config_dir = config_home / "opencode"
     opencode_config_dir.mkdir(parents=True, exist_ok=True)
 
+    # ------------------------------------------------------------------
+    # Log key paths for debugging
+    # ------------------------------------------------------------------
+
+    transcript_parts.append("\n[HARNESS PATH INFO]\n")
+    transcript_parts.append(f"project_root={project_root}\n")
+    transcript_parts.append(f"workspace={workspace}\n")
+    transcript_parts.append(f"tools_dir={tools_dir}\n")
+    transcript_parts.append(f"opencode_bin={opencode_bin}\n")
+    transcript_parts.append(f"config_home={config_home}\n")
+    transcript_parts.append(f"state_home={state_home}\n")
+    transcript_parts.append(f"cache_home={cache_home}\n")
+    transcript_parts.append(f"opencode_config_dir={opencode_config_dir}\n\n")
+
+    # ------------------------------------------------------------------
+    # Copy opencode.json
+    # ------------------------------------------------------------------
+
     shutil.copy2(
         test_opencode_json,
         opencode_config_dir / "opencode.json",
     )
+
+    # ------------------------------------------------------------------
+    # Copy prompts directory if present
+    # ------------------------------------------------------------------
+
+    if prompts_src.exists():
+        prompts_dst = opencode_config_dir / "prompts"
+
+        if prompts_dst.exists():
+            shutil.rmtree(prompts_dst)
+
+        shutil.copytree(prompts_src, prompts_dst)
+
+    # ------------------------------------------------------------------
+    # Environment variables
+    # ------------------------------------------------------------------
 
     env = {
         **os.environ,
@@ -154,7 +183,6 @@ def run_opencode_tui(
         timeout=quiet_timeout,
     )
 
-    transcript_parts: list[str] = []
     timed_out = False
     permission_approvals = 0
 
