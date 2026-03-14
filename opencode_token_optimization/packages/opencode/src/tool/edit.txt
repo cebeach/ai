@@ -1,0 +1,1 @@
+Replace exact text in a file. Read the file first. oldString must match exactly; use more context if multiple matches occur. Use replaceAll to replace every match.

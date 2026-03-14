@@ -1,0 +1,1 @@
+Find files by glob pattern. Supports patterns like "**/*.ts". Returns matching paths sorted by modification time.

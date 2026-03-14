@@ -1,0 +1,1 @@
+Write a file. Overwrites existing content. Read existing files first. Prefer edit for changing existing files; use write for full-file writes or new files when needed.
