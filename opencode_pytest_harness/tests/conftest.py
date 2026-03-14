@@ -11,6 +11,7 @@ DEFAULT_OPENCODE_BIN = (
     / "build/opencode_pytest_harness/latest_build/packages/opencode/dist/opencode-linux-x64/bin/opencode"
 )
 
+
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent

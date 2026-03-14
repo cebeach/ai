@@ -1,23 +1,14 @@
-from __future__ import annotations
-
 import filecmp
 import json
-import shutil
-import subprocess
-from pathlib import Path
-
-
 import os
 import pexpect
 import re
+import shutil
+import subprocess
 import time
+from pathlib import Path
 import pexpect
-
 import pytest
-
-
-
-
 
 ROOT = Path(__file__).resolve().parent.parent
 CASES_DIR = ROOT / "tests" / "cases"
@@ -38,7 +29,6 @@ class CaseResult(dict):
         return self["returncode"]
 
 
-
 def load_case(case_path: Path) -> dict:
     import yaml
 
@@ -49,15 +39,12 @@ def load_case(case_path: Path) -> dict:
     return case
 
 
-
 def iter_case_paths() -> list[Path]:
     return sorted(CASES_DIR.glob("*.yaml"))
 
 
-
 def copy_fixture_tree(src: Path, dest: Path) -> None:
     shutil.copytree(src, dest, dirs_exist_ok=True)
-
 
 
 def snapshot_text_files(root: Path) -> dict[str, str]:
@@ -69,7 +56,6 @@ def snapshot_text_files(root: Path) -> dict[str, str]:
         except UnicodeDecodeError:
             snapshot[rel] = "<binary>"
     return snapshot
-
 
 
 def write_snapshot_json(path: Path, data: dict[str, str]) -> None:
@@ -199,9 +185,7 @@ def run_opencode_tui(
 
         while True:
             if time.monotonic() >= deadline:
-                transcript_parts.append(
-                    "\n[HARNESS TIMEOUT waiting for response completion]\n"
-                )
+                transcript_parts.append("\n[HARNESS TIMEOUT waiting for response completion]\n")
                 timed_out = True
                 break
 
@@ -221,15 +205,11 @@ def run_opencode_tui(
                     permission_approvals += 1
 
                     if permission_approvals > max_permission_approvals:
-                        transcript_parts.append(
-                            "\n[HARNESS ABORT: too many permission prompts]\n"
-                        )
+                        transcript_parts.append("\n[HARNESS ABORT: too many permission prompts]\n")
                         timed_out = True
                         break
 
-                    transcript_parts.append(
-                        "\n[HARNESS: approving permission dialog with Enter]\n"
-                    )
+                    transcript_parts.append("\n[HARNESS: approving permission dialog with Enter]\n")
                     child.send("\r")
 
                     # Let the TUI settle after the approval redraw.
@@ -282,11 +262,9 @@ def assert_contains_all(haystack: str, needles: list[str], label: str) -> None:
         assert needle in haystack, f"{label} missing expected text: {needle!r}"
 
 
-
 def assert_not_contains_any(haystack: str, needles: list[str], label: str) -> None:
     for needle in needles:
         assert needle not in haystack, f"{label} unexpectedly contained: {needle!r}"
-
 
 
 def assert_file_contains(workspace: Path, entries: list[dict]) -> None:
@@ -296,7 +274,6 @@ def assert_file_contains(workspace: Path, entries: list[dict]) -> None:
         assert entry["contains"] in content, f"{entry['path']} missing expected text"
 
 
-
 def assert_file_not_contains(workspace: Path, entries: list[dict]) -> None:
     for entry in entries:
         path = workspace / entry["path"]
@@ -304,11 +281,9 @@ def assert_file_not_contains(workspace: Path, entries: list[dict]) -> None:
         assert entry["contains"] not in content, f"{entry['path']} still contains forbidden text"
 
 
-
 def assert_files_exist(workspace: Path, paths: list[str]) -> None:
     for rel_path in paths:
         assert (workspace / rel_path).exists(), f"Expected file to exist: {rel_path}"
-
 
 
 def assert_files_unchanged(before: dict[str, str], after: dict[str, str]) -> None:
@@ -335,23 +310,23 @@ def test_opencode_case(case_path: Path, tmp_path: Path, artifacts_root: Path, op
     result = run_opencode_tui(opencode_bin, case["prompt"], workspace, timeout)
 
     (case_artifact_dir / "stdout_raw.txt").write_text(result["raw_stdout"], encoding="utf-8")
-    (case_artifact_dir / "stdout.txt").write_text(result['stdout'], encoding="utf-8")
-    (case_artifact_dir / "stderr.txt").write_text(result['stderr'], encoding="utf-8")
+    (case_artifact_dir / "stdout.txt").write_text(result["stdout"], encoding="utf-8")
+    (case_artifact_dir / "stderr.txt").write_text(result["stderr"], encoding="utf-8")
 
     after_snapshot = snapshot_text_files(workspace)
     write_snapshot_json(case_artifact_dir / "workspace_after.json", after_snapshot)
 
     expect = case["expect"]
     expected_returncode = int(expect.get("returncode", 0))
-    assert result['returncode'] == expected_returncode, (
+    assert result["returncode"] == expected_returncode, (
         f"Unexpected return code for {case['name']}: {result['returncode']}\n"
         f"STDOUT:\n{result['stdout']}\n\nSTDERR:\n{result['stderr']}"
     )
 
-    assert_contains_all(result['stdout'], expect.get("stdout_contains", []), "stdout")
-    assert_not_contains_any(result['stdout'], expect.get("stdout_not_contains", []), "stdout")
-    assert_contains_all(result['stderr'], expect.get("stderr_contains", []), "stderr")
-    assert_not_contains_any(result['stderr'], expect.get("stderr_not_contains", []), "stderr")
+    assert_contains_all(result["stdout"], expect.get("stdout_contains", []), "stdout")
+    assert_not_contains_any(result["stdout"], expect.get("stdout_not_contains", []), "stdout")
+    assert_contains_all(result["stderr"], expect.get("stderr_contains", []), "stderr")
+    assert_not_contains_any(result["stderr"], expect.get("stderr_not_contains", []), "stderr")
     assert_file_contains(workspace, expect.get("file_contains", []))
     assert_file_not_contains(workspace, expect.get("file_not_contains", []))
     assert_files_exist(workspace, expect.get("files_exist", []))
