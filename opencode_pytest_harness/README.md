@@ -22,7 +22,7 @@ Create and activate a virtual environment, then install the required packages:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install pytest pyyaml
+python -m pip install pytest pyyaml pexpect
 ```
 
 Run the suite:
