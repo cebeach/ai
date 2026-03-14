@@ -1,0 +1,66 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "provider": {
+        "local": {
+            "npm": "@ai-sdk/openai-compatible",
+            "name": "Local llama.cpp",
+            "options": {
+                "baseURL": "http://127.0.0.1:8001/v1"
+            },
+            "models": {
+                "gpt-oss-20b": {
+                    "name": "local/gpt-oss-20b",
+                    "tools": true
+                }
+            }
+        }
+    },
+    "agent": {
+        "title": {
+            "prompt": "{file:./prompts/title.txt}",
+            "temperature": 0.1
+        },
+        "build": {
+            "mode": "primary",
+            "model": "local/gpt-oss-20b",
+            "prompt": "{file:./prompts/build.txt}",
+            "tools": {
+                "read": true,
+                "glob": true,
+                "grep": true,
+                "edit": true,
+                "write": true
+            }
+        },
+        "plan": {
+            "mode": "primary",
+            "model": "local/gpt-oss-20b",
+            "tools": {
+                "write": false,
+                "edit": false,
+                "bash": false
+            }
+        },
+        "git-agent": {
+            "mode": "subagent",
+            "description": "Use for git operations such as commit, diff, and branch analysis",
+            "tools": {
+                "git_*": true
+            }
+        },
+        "research-agent": {
+            "mode": "subagent",
+            "description": "Use for web search and retrieving pages",
+            "tools": {
+                "searxng_*": true
+            }
+        },
+        "memory-agent": {
+            "mode": "subagent",
+            "description": "Use for storing and retrieving notes from Trilium",
+            "tools": {
+                "trilium_*": true
+            }
+        }
+    }
+}

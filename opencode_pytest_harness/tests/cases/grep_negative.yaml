@@ -1,0 +1,8 @@
+name: grep_negative
+fixture: basic_files
+prompt: |
+  Search the workspace for the exact text "replaced" and report whether it exists.
+timeout_seconds: 30
+expect:
+  files_unchanged: true
+

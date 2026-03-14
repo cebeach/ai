@@ -1,0 +1,8 @@
+__pycache__
+venv
+tests/artifacts
+*.swp
+
+# opencode_build should be a symbolic link to your opencode build directory
+opencode_build
+
