@@ -1,3 +1,4 @@
 pexpect
 pytest
 pyyaml
+ruff
