@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
-
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_OPENCODE_BIN = (
-    Path.home()
-    / "build/opencode_pytest_harness/latest_build/packages/opencode/dist/opencode-linux-x64/bin/opencode"
-
+DEFAULT_OPENCODE_BIN = PROJECT_ROOT / "latest" / "packages/opencode/dist/opencode-linux-x64/bin/opencode"
 
 
 def load_case(case_path: Path) -> dict:
@@ -22,7 +18,6 @@ def load_case(case_path: Path) -> dict:
         case = yaml.safe_load(handle)
     case.setdefault("expect", {})
     return case
-
 
 
 def main() -> int:

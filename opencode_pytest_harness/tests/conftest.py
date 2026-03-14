@@ -1,14 +1,14 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
-
 import pytest
 import yaml
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# PROJECT_ROOT/opencode_build should be a symbolic link to your target opencode build (source) directory
 DEFAULT_OPENCODE_BIN = (
-    Path.home()
-    / "build/opencode_pytest_harness/latest_build/packages/opencode/dist/opencode-linux-x64/bin/opencode"
+    PROJECT_ROOT / "opencode_build" / "packages/opencode/dist/opencode-linux-x64/bin/opencode"
 )
 
 
