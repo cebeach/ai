@@ -1,6 +1,6 @@
-# token-efficient_local_agent_runtime_r2.md
-Revision: r2
-Date: 2026-03-12
+# token-efficient_local_agent_runtime_r3.md
+Revision: r3
+Date: 2026-03-14T00:00:00Z
 
 ## 1. Purpose
 
@@ -111,16 +111,20 @@ Recommended transport:
 
 This avoids networking overhead while maintaining a structured protocol.
 
+Version 1 uses a single-threaded message loop: the runtime processes one request at a time, and a slow plugin handler will block subsequent requests until it returns. This is an explicit v1 non-goal. For a local single-user agent the latency cost is acceptable, and the simplicity benefit is significant. Concurrency, async dispatch, and per-plugin timeouts are deferred to a future revision.
+
 ### 4.2 Plugin Registry
 
 At runtime startup, plugins are discovered and registered.
 
 Example directory structure:
 
+```
 plugins/
   web/
   repo/
   memory/
+```
 
 Each plugin exposes:
 
@@ -460,9 +464,9 @@ Eviction of ephemeral handles must remove materialized data and handle metadata 
 
 To keep the model interface simple, version 1 should expose at most one generic introspection action:
 
-- `runtime.describe_handle`
+- `runtime.handle`
 
-This action would return lightweight metadata only, such as:
+This action returns lightweight metadata only, such as:
 
 - handle kind
 - owner context
@@ -472,6 +476,8 @@ This action would return lightweight metadata only, such as:
 - expiration time
 
 This helps the model decide whether to reuse an artifact without reinjecting full contents.
+
+The proof-of-concept tool definition for `runtime.handle` is specified in §17.9.
 
 ### 8.10 Error Semantics for Handles
 
@@ -497,27 +503,7 @@ This keeps the system cognitively simple for both the model and the implementati
 
 ## 9. Networking-Inspired Concepts
 
-Several networking concepts influence the runtime design.
-
-Message envelopes
-
-Structured request and response packets.
-
-Session state
-
-Shared runtime session context.
-
-Soft state
-
-Cached artifacts that expire automatically.
-
-Opaque handles
-
-Stable references to runtime artifacts.
-
-Request identifiers
-
-Used to correlate requests and responses.
+Several networking concepts influence the runtime design: structured message envelopes (request/response packets with explicit IDs), session state (shared runtime context across requests), soft state (cached artifacts that expire automatically via TTL), opaque handles (stable artifact references analogous to file descriptors or socket handles), and request identifiers (used to correlate asynchronous responses). Readers familiar with network protocol design will find these idioms map naturally onto the runtime architecture.
 
 ## 10. Microkernel Analogy
 
@@ -576,6 +562,8 @@ Structured outputs
 Keep results predictable for the model.
 
 ## 13. Formal Runtime Protocol Specification
+
+This section formalizes the protocol introduced in summary form in §5. Where §5 provides a readable overview, §13 is the normative specification intended as an implementation reference.
 
 This section defines the minimal protocol between OpenCode and the runtime.
 
@@ -783,6 +771,7 @@ Key pieces:
 
 - runtime object
 - context registry
+- scoped state view (plugin isolation)
 - message loop
 - request parser
 - response serializer
@@ -795,10 +784,35 @@ import json
 from importlib import import_module
 
 
+class StateView:
+    """Scoped view of runtime state for a single plugin context.
+
+    Each plugin receives a StateView namespaced to its own context,
+    preventing direct access to other plugins' state entries. This
+    makes the isolation principle in §15 concrete rather than advisory.
+    """
+
+    def __init__(self, store: dict, namespace: str) -> None:
+        self._store = store
+        self._ns = namespace
+
+    def _key(self, key: str) -> str:
+        return f"{self._ns}:{key}"
+
+    def get(self, key: str, default=None):
+        return self._store.get(self._key(key), default)
+
+    def set(self, key: str, value) -> None:
+        self._store[self._key(key)] = value
+
+    def delete(self, key: str) -> None:
+        self._store.pop(self._key(key), None)
+
+
 class Runtime:
     def __init__(self):
         self.contexts = {}
-        self.state = {}
+        self._store = {}
 
     def register_context(self, name, actions):
         self.contexts[name] = actions
@@ -817,7 +831,8 @@ class Runtime:
             return {"id": req_id, "error": {"code": "not_found", "message": msg_type}}
 
         try:
-            result = actions[action](payload, self.state)
+            state_view = StateView(self._store, context)
+            result = actions[action](payload, state_view)
             return {"id": req_id, "result": result}
         except Exception as e:
             return {"id": req_id, "error": {"code": "plugin_error", "message": str(e)}}
@@ -846,6 +861,8 @@ if __name__ == "__main__":
 ```
 
 This is illustrative only, but it demonstrates how small the stable core can remain.
+
+The `StateView` proxy is the key addition over the simplest possible sketch: each plugin handler receives a namespace-scoped view of the shared store rather than the raw dict. A `web` plugin calling `state_view.set("cache:12", data)` writes to `web:cache:12` internally; a `repo` plugin cannot read or overwrite that entry without going through the runtime's routing layer. This keeps the isolation model in §15 concrete at the implementation level.
 
 ## 17. OpenCode Proof-of-Concept Interface Contract
 
@@ -907,6 +924,8 @@ For the proof of concept, a smaller bridge is preferable:
 - plugins remain independently evolvable
 
 This preserves the architectural principle of model-facing simplicity while reducing schema injection cost.
+
+As a rough order-of-magnitude estimate: a flat catalog of 7 independently-defined OpenCode tools, each with a name, description, and typed parameters, injects on the order of 350–500 tokens of schema overhead per turn. The two-tool surface (`runtime.call` plus `runtime.handle`) injects roughly 60–90 tokens. The difference — approximately 300–400 tokens per turn — compounds across multi-step agent interactions and is a non-trivial fraction of the effective context budget on a 24 GiB VRAM system. These figures are estimates pending measurement against actual OpenCode tool schema serialization; the 30-run benchmark study is the appropriate vehicle for validating them.
 
 ### 17.4 Canonical OpenCode Request Shape
 
@@ -1003,7 +1022,7 @@ Recommended initial actions:
 - `web.search`
 - `web.fetch`
 
-These actions are already aligned with the architecture's intended model-facing concepts. fileciteturn1file0
+These actions are already aligned with the architecture's intended model-facing concepts. 
 
 ### 17.7 Handle Behavior in the Proof of Concept
 
@@ -1023,7 +1042,7 @@ This allows the model to say things like:
 - read more from `page:9`
 - continue from `grep:44`
 
-This handle-first pattern is a central token-efficiency mechanism in the architecture. fileciteturn1file4
+This handle-first pattern is a central token-efficiency mechanism in the architecture. 
 
 ### 17.8 OpenCode Bridge Responsibilities
 
@@ -1044,7 +1063,7 @@ It should not:
 - expand results into verbose prose
 - maintain a second parallel state model beyond what is needed for transport bookkeeping
 
-This preserves the domain-agnostic runtime principle. fileciteturn1file1
+This preserves the domain-agnostic runtime principle. 
 
 ### 17.9 Recommended OpenCode Tool Definitions
 
@@ -1139,12 +1158,12 @@ The architecture supports new capability domains through plugins.
 
 Potential future domains:
 
-research
-vector
-docs
-system
-calendar
-database
+- research
+- vector
+- docs
+- system
+- calendar
+- database
 
 Plugins can be added without modifying the runtime core.
 
