@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Directory containing this script
+tools="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Project root (parent of tools/)
+root="$(cd "${tools}/.." && pwd -P)"
+
+RUFF=${root}/venv/bin/ruff
+
+${RUFF} format ${root}/tests
+${RUFF} format ${root}/tools
+
