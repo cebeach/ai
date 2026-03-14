@@ -101,11 +101,25 @@ def run_opencode_tui(
     if not test_opencode_json.exists():
         raise FileNotFoundError(f"Missing harness config: {test_opencode_json}")
 
-    config_home = workspace / ".xdg_config"
-    state_home = workspace / ".xdg_state"
-    cache_home = workspace / ".xdg_cache"
+    # tmp_path/
+    #     workspace/          ← fixture files, snapshot root
+    #     .xdg_config/        ← opencode config, invisible to snapshots
+    #     .xdg_data/          ← opencode session storage (XDG_DATA_HOME), invisible to snapshots
+    #     .xdg_state/         ← opencode state, invisible to snapshots
+    #     .xdg_cache/         ← bun cache + node_modules, invisible to snapshots
+    #
+    # XDG_DATA_HOME must be redirected in addition to XDG_STATE_HOME: OpenCode stores
+    # session files under XDG_DATA_HOME (~/.local/share/opencode) per the XDG spec.
+    # Without this, session state from prior runs leaks in via the real data directory,
+    # causing the second run to find a stale session referencing the previous tmp_path.
+    xdg_base = workspace.parent
+    config_home = xdg_base / ".xdg_config"
+    data_home = xdg_base / ".xdg_data"
+    state_home = xdg_base / ".xdg_state"
+    cache_home = xdg_base / ".xdg_cache"
 
     config_home.mkdir(parents=True, exist_ok=True)
+    data_home.mkdir(parents=True, exist_ok=True)
     state_home.mkdir(parents=True, exist_ok=True)
     cache_home.mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +136,7 @@ def run_opencode_tui(
     transcript_parts.append(f"tools_dir={tools_dir}\n")
     transcript_parts.append(f"opencode_bin={opencode_bin}\n")
     transcript_parts.append(f"config_home={config_home}\n")
+    transcript_parts.append(f"data_home={data_home}\n")
     transcript_parts.append(f"state_home={state_home}\n")
     transcript_parts.append(f"cache_home={cache_home}\n")
     transcript_parts.append(f"opencode_config_dir={opencode_config_dir}\n\n")
@@ -157,6 +172,7 @@ def run_opencode_tui(
         "CI": "1",
         "NO_COLOR": "1",
         "XDG_CONFIG_HOME": str(config_home),
+        "XDG_DATA_HOME": str(data_home),
         "XDG_STATE_HOME": str(state_home),
         "XDG_CACHE_HOME": str(cache_home),
     }
@@ -209,8 +225,16 @@ def run_opencode_tui(
                         timed_out = True
                         break
 
-                    transcript_parts.append("\n[HARNESS: approving permission dialog with Enter]\n")
+                    # Tab moves focus from "Allow once" to "Allow always"; Enter confirms.
+                    # Using "Allow always" prevents re-prompting on subsequent tool calls
+                    # within the same test.
+                    transcript_parts.append("\n[HARNESS: approving permission dialog with Tab+Enter (Allow always)]\n")
+                    child.send("\t")
                     child.send("\r")
+
+                    # Reset so a READY_RE match from the post-approval redraw does not
+                    # prematurely terminate the response-wait loop.
+                    saw_post_submit_output = False
 
                     # Let the TUI settle after the approval redraw.
                     try:

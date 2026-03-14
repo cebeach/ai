@@ -5,4 +5,5 @@ tests/artifacts
 
 # opencode_build should be a symbolic link to your opencode build directory
 opencode_build
+*.tgz
 
