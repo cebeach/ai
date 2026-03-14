@@ -1,23 +1,27 @@
 ## Local AI Coding Agent: Hardware & Software Design
 
-### Design Reference | March 2026 | r68
+### Design Reference | March 2026 | r109
 
 *Drafted with Claude Sonnet 4.6 (Anthropic) as a collaborative research and drafting assistant.*
 
 ## 1\. Objective
 
-The goal is to build a fully local, privacy-preserving AI coding agent — a functional analogue
-of Claude Code — using open-weight models running on consumer hardware. The system must support
-long-context agentic workflows with reliable tool use, multi-file editing, structured development
-methodology, and extensibility through language servers and external tool integrations via MCP.
+The commercial AI coding agents — Claude Code, Copilot, Cursor — are impressive. They are also
+cloud-dependent: every keystroke, every codebase context window, every tool call transits a
+third-party API. For developers working on proprietary code, sensitive infrastructure, or
+air-gapped environments, this is not a viable trade-off.
 
-The selected stack centres on three components: OpenCode as the terminal UI agent frontend,
-Superpowers as the agentic skills and workflow framework, and llama.cpp as the inference
-backend — served locally on a single NVIDIA RTX 4090 workstation with no cloud dependencies.
-The preferred primary model is openai/gpt-oss-20b MXFP4: a mixture-of-experts model delivering
-~250 t/s generation and full 131K context on 24GB VRAM, with chain-of-thought reasoning and
-native tool calling. Devstral-Small-2-24B Q4\_K\_M is available as a coding-specialist
-alternative at 98K context.
+This document is a complete engineering reference for a fully local alternative: a
+privacy-preserving AI coding agent running on a single consumer GPU with no cloud dependencies,
+no API keys, and no data leaving the machine.[^1]
+
+This document records the complete engineering decisions behind that system: hardware baseline,
+software selection, configuration, empirical performance data, and the reasoning behind each
+choice. Results and conclusions are in Chapter 4.
+
+[^1]: The one opt-in exception is the SearXNG MCP server, which enables web search by routing
+queries through a self-hosted SearXNG instance; users who require strict air-gap operation can
+simply omit it.
 
 ## 2\. Hardware Baseline
 
@@ -35,49 +39,62 @@ Target machine: Debian 12, KDE Plasma 5.
 | Memory Bandwidth | 1,008 GB/s — primary performance bottleneck for token generation |
 | OS | Debian 12, KDE Plasma 5 |
 
-## 3\. Conclusion
-
-The RTX 4090 is a more capable inference platform than its consumer positioning suggests. Two
-empirical studies underpin this assessment.
-
-The VRAM sweep (§10) establishes that Q8\_0 KV cache quantisation, used alongside Flash
-Attention, delivers ~98K usable tokens for dense models (Devstral, DeepSeek-R1-14B) — nearly
-double the F16 baseline. For gpt-oss-20b MXFP4, the MoE architecture's compact per-head
-dimensions make this a non-issue: the full 131,072-token native context fits with nearly 8GB
-to spare at Q8\_0, at a marginal KV cost of ~0.013 MiB/token.
-
-The benchmark study (§14) establishes that gpt-oss-20b MXFP4 on this hardware delivers
-prefill throughput of ~10,000–11,000 t/s and generation of ~250 t/s — the latter a direct
-consequence of the MoE architecture activating only 3.6B of 20.91B parameters per token,
-moving 4.7× less weight through VRAM per generated token than a comparable dense model.
-These are single-run figures; a repeat study (§14.4) is planned to establish means and
-confidence intervals. Decode speed is bound by the 1,008 GB/s memory bandwidth ceiling and
-is insensitive to batch size configuration.
-
-The preferred primary model is **gpt-oss-20b MXFP4**: full native context on 24GB, ~250 t/s
-generation, no OpenCode compatibility issues, and chain-of-thought reasoning built in.
-Devstral-Small-2-24B Q4\_K\_M remains available as a coding-specialist alternative at 98K
-context and ~55 t/s generation. DeepSeek-R1-Distill-Qwen-14B Q6\_K\_L is confirmed to load
-and serve correctly; OpenCode tool call compatibility is pending empirical verification.
-
-Language servers and MCP servers run entirely on CPU and can be added incrementally without
-any impact on the inference stack. An upgrade to the RTX PRO 6000 Blackwell would remove
-the VRAM ceiling entirely — enabling Q8 quality at full context for all three models, and
-opening access to larger models such as gpt-oss-120b — but is not required for productive
-use of the current stack.
-
-## 4\. Software Stack Overview
+## 3\. Software Stack Overview
 
 The complete stack has four logical layers. Each layer was selected independently on merit, and the full combination is validated to interoperate correctly.
 
 | Layer | Component | Role |
 | --- | --- | --- |
-| Inference server | llama.cpp llama-server | Hosts the model; OpenAI-compatible REST API on localhost |
-| Language model | Devstral-Small-2-24B Q4\_K\_M | Agentic coding model; tool calling; multi-file edits |
-| Agent frontend | OpenCode | Terminal UI; session management; LSP; tool dispatch |
-| Workflow framework | Superpowers | Skills library; TDD enforcement; subagent orchestration |
-| Language servers | Per-language (rust-analyzer, pyright, etc.) | Semantic code intelligence; go-to-definition; diagnostics |
-| MCP servers | SearXNG, trilium-bolt, awslabs/mcp, etc. | External capabilities; web search; notes; AWS |
+| Inference server | [llama.cpp](https://github.com/ggml-org/llama.cpp) llama-server | Hosts the model; OpenAI-compatible REST API on localhost |
+| Language model | [openai/gpt-oss-20b MXFP4](https://openai.com/index/introducing-gpt-oss) | Agentic coding model; tool calling; multi-file edits; chain-of-thought reasoning |
+| Agent frontend | [OpenCode](https://github.com/anomalyco/opencode) | Terminal UI; session management; [LSP](https://microsoft.github.io/language-server-protocol/); tool dispatch |
+| Workflow framework | [Superpowers](https://github.com/obra/superpowers) | Skills library; TDD enforcement; subagent orchestration |
+| [Language servers](https://microsoft.github.io/language-server-protocol/) | Per-language (rust-analyzer, pyright, etc.) | Semantic code intelligence; go-to-definition; diagnostics |
+| [MCP](https://modelcontextprotocol.io) servers | SearXNG, trilium-bolt, awslabs/mcp, etc. | External capabilities; web search; notes; AWS |
+
+### 3.1 Capabilities
+
+**Software development.** The primary use case is day-to-day coding: multi-file edits, bash execution, tool calls, and semantic code intelligence via language servers. The Superpowers workflow framework enforces test-driven development and subagent orchestration, making multi-hour autonomous sessions tractable. See Chapter 4 for empirical performance characterization.
+
+**Research and knowledge work.** The SearXNG MCP server gives the agent access to current web search with no API keys and no cloud exposure. Findings can be stored directly in Trilium Notes via the trilium-bolt MCP server, building a persistent, searchable knowledge base from agent sessions. Mermaid diagrams can be saved as typed Trilium notes and rendered natively in the UI — making the agent useful for documentation and design work, not just code generation.
+
+**Codebase comprehension and reimplementation.** The agent can read an unfamiliar codebase, generate a series of Mermaid diagrams covering module dependencies, data flow, and state machines, and store them as a structured set of Trilium notes. That diagram set becomes a working specification — precise enough to drive a clean reimplementation from scratch. Armin Ronacher's [AI And The Ship of Theseus](https://lucumr.pocoo.org/2026/3/5/theseus/) (March 2026) observes that reimplementation from a test suite and public API has become trivially cheap with local coding agents, with significant consequences for how software licenses are enforced in practice.
+
+**Infrastructure and cloud operations.** The AWS MCP server exposes over 15,000 AWS APIs with local credential handling and CloudTrail audit logging. The Docker MCP server provides container and Compose management from within the agent session. Both run entirely on CPU and add no load to the inference stack.
+
+### 3.2 References
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)
+- [openai/gpt-oss-20b](https://openai.com/index/introducing-gpt-oss)
+- [OpenCode](https://github.com/anomalyco/opencode)
+- [Superpowers](https://github.com/obra/superpowers)
+- [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [AI And The Ship of Theseus — Armin Ronacher](https://lucumr.pocoo.org/2026/3/5/theseus/)
+
+## 4\. Conclusion
+
+The primary objectives have been met. [OpenCode](https://github.com/anomalyco/opencode) is operational as a fully local agentic coding agent: it performs multi-file edits, executes bash commands, dispatches tool calls, and integrates with language servers for semantic code intelligence. Retrieval-augmented generation is available via the SearXNG MCP server, giving the agent access to current web search without any cloud model dependency. The [Superpowers](https://github.com/obra/superpowers) workflow framework layers structured development methodology — test-driven development, subagent orchestration, and repeatable engineering process — on top of the agent frontend. The result is a platform that is functionally comparable to commercial coding agents for day-to-day development tasks, running entirely on consumer hardware at no ongoing cost.
+
+The stack is built on [llama.cpp](https://github.com/ggml-org/llama.cpp) rather than the more accessible [Ollama](https://ollama.com/) wrapper that [NVIDIA's own RTX AI Garage blog](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss/) recommends for running [gpt-oss-20b](https://openai.com/index/introducing-gpt-oss) on a 24GB RTX GPU. Ollama uses llama.cpp as its inference engine, but abstracts away the controls that matter most for an agentic workload: context size, KV cache quantization, chat template handling, and tool call behavior. The primary model is [gpt-oss-20b](https://openai.com/index/introducing-gpt-oss) MXFP4 — not a post-training quantization, but the precision at which OpenAI trained the model's MoE feed-forward layers. The entire stack is MIT or Apache 2.0 licensed.
+
+The performance characteristics of the stack reinforce this conclusion. The RTX 4090 is a more capable inference platform than its consumer positioning suggests, as two empirical studies document. The VRAM sweep (§10) establishes that Q8\_0 KV cache quantization alongside Flash Attention delivers ~98K usable tokens for dense models (Devstral, DeepSeek-R1-14B) — nearly double the F16 baseline. For gpt-oss-20b MXFP4, the MoE architecture's compact per-head dimensions make this a non-issue: the full 131,072-token native context fits with nearly 8GB to spare at Q8\_0, at a marginal KV cost of ~0.013 MiB/token. That headroom enables multi-slot operation — the production configuration runs 4 concurrent full-context sessions via `--parallel 4 --kv-unified --ctx-size 524,288`, with the shared KV pool consuming only ~1,657 MiB total (see §9.6 and §10.5). The benchmark study (§14) establishes prefill throughput of ~10,000–11,000 t/s and generation of ~250 t/s — the latter a direct consequence of the MoE architecture activating only 3.6B of 20.91B parameters per token, moving 4.7× less weight through VRAM per generated token than a comparable dense model. Decode speed is bound by the 1,008 GB/s memory bandwidth ceiling and is insensitive to batch size. These are single-run figures; a repeat study (§14.4) is planned to establish means and confidence intervals.
+
+These figures represent a floor rather than a ceiling. Benchmarking data in §14.2 documents a 15% generation improvement between two [llama.cpp](https://github.com/ggml-org/llama.cpp) builds separated by only a few months, and further gains are expected as [CUDA](https://developer.nvidia.com/cuda) optimizations continue to mature.
+
+The preferred primary model is **gpt-oss-20b MXFP4**: full native context on 24GB, ~250 t/s generation, no OpenCode compatibility issues, and chain-of-thought reasoning built in. Devstral-Small-2-24B Q4\_K\_M is available as a coding-specialist alternative at 98K context and ~55 t/s generation. DeepSeek-R1-Distill-Qwen-14B Q6\_K\_L is confirmed to load and serve correctly; OpenCode tool call compatibility remains under active verification.
+
+Language servers and MCP servers run entirely on CPU and can be added incrementally without any impact on the inference stack. An upgrade to the RTX PRO 6000 Blackwell would remove the VRAM ceiling entirely — enabling Q8 quality at full context for all three models and opening access to larger models such as gpt-oss-120b — but is not required for productive use of the current stack.
+
+### 4.1 References
+
+- [OpenAI's gpt-oss-20b](https://openai.com/index/introducing-gpt-oss)
+- [Ollama](https://ollama.com/)
+- [NVIDIA RTX AI Garage — OpenAI OSS on RTX](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss/)
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)
+- [OpenCode](https://github.com/anomalyco/opencode)
+- [Superpowers](https://github.com/obra/superpowers)
+- [CUDA](https://developer.nvidia.com/cuda)
 
 ## 5\. Custom Kernel Build
 
@@ -164,9 +181,9 @@ df -h /boot   # verify free space
 
 ### 5.7 References
 
-*   [Debian FAQ — Kernel](https://www.debian.org/doc/manuals/debian-faq/kernel.en.html)
-*   [Debian Kernel Handbook](https://kernel-team.pages.debian.net/kernel-handbook/ch-common-tasks.html#s-common-building)
-*   [Debian Administrator's Handbook — Compiling a Kernel](https://www.debian.org/doc/manuals/debian-handbook/sect.kernel-compilation.en.html)
+- [Debian FAQ — Kernel](https://www.debian.org/doc/manuals/debian-faq/kernel.en.html)
+- [Debian Kernel Handbook](https://kernel-team.pages.debian.net/kernel-handbook/ch-common-tasks.html#s-common-building)
+- [Debian Administrator's Handbook — Compiling a Kernel](https://www.debian.org/doc/manuals/debian-handbook/sect.kernel-compilation.en.html)
 
 ## 6\. NVIDIA Accelerated Linux Graphics Driver Installation
 
@@ -193,7 +210,7 @@ https://www.nvidia.com/en-us/drivers/
 
 Use the Manual Driver Search form to locate the correct driver. Select your product type and series, then your specific GPU, then set Operating System → Linux 64-bit and Download Type → Production Branch. Pick the top result. The product type path differs by GPU family — GeForce cards are found under GeForce, while professional cards such as the RTX PRO 6000 Blackwell are found under NVIDIA RTX PRO / RTX / Quadro.
 
-NVIDIA organises driver releases into branches identified by the leading digits of the version number — `580.xxx.yy` belongs to branch R580, `590.xxx.yy` to R590, and so on. Minor releases within a branch deliver bug fixes and security updates; upgrading within a branch is low-risk. **Production Branch** is the stable choice for a workstation; **New Feature Branch** targets early adopters and is not recommended for a stable environment. The [NVIDIA Unix Driver Archive](https://www.nvidia.com/en-us/drivers/unix/) provides a concise enumeration of current branch names and version numbers — as of March 2026: Production Branch → 580.xxx.yy, New Feature → 590.xx.yy, Beta → 595.xx.yy. The [Driver Lifecycle](https://docs.nvidia.com/datacenter/tesla/drivers/driver-lifecycle.html) page covers branch EOL dates and CUDA toolkit compatibility in more depth.
+NVIDIA organizes driver releases into branches identified by the leading digits of the version number — `580.xxx.yy` belongs to branch R580, `590.xxx.yy` to R590, and so on. Minor releases within a branch deliver bug fixes and security updates; upgrading within a branch is low-risk. **Production Branch** is the stable choice for a workstation; **New Feature Branch** targets early adopters and is not recommended for a stable environment. The [NVIDIA Unix Driver Archive](https://www.nvidia.com/en-us/drivers/unix/) provides a concise enumeration of current branch names and version numbers — as of March 2026: Production Branch → 580.xxx.yy, New Feature → 590.xx.yy, Beta → 595.xx.yy. The [Driver Lifecycle](https://docs.nvidia.com/datacenter/tesla/drivers/driver-lifecycle.html) page covers branch EOL dates and CUDA toolkit compatibility in more depth.
 
 As of March 2026, the current Production Branch on Linux x86_64/AMD64 is **R580** (CUDA 13.x). The downloaded file will be named `NVIDIA-Linux-x86_64-580.xxx.yy.run`.
 
@@ -210,7 +227,7 @@ sh NVIDIA-Linux-x86_64-580.xxx.yy.run --extract-only --target NVIDIA-Linux-x86_6
 
 This is worth doing before any installation or upgrade. The extracted directory contains a `README.txt` that is the single most informative document NVIDIA provides for Linux driver users — far more so than anything on the consumer download pages. Key contents include:
 
-- **Supported Products list (Appendix A)** — the complete list of every GPU covered by this driver release, with PCI device IDs. A single R580 `.run` file covers hardware ranging from consumer GeForce (RTX 4090, RTX 5090) through professional Blackwell workstation GPUs ([RTX PRO 6000 Blackwell](https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-6000/)) and data centre parts (H100, H200). This breadth is not documented anywhere on the download pages and can only be confirmed from this list or via the unix.html archive path described above.
+- **Supported Products list (Appendix A)** — the complete list of every GPU covered by this driver release, with PCI device IDs. A single R580 `.run` file covers hardware ranging from consumer GeForce (RTX 4090, RTX 5090) through professional Blackwell workstation GPUs ([RTX PRO 6000 Blackwell](https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-6000/)) and data center parts (H100, H200). This breadth is not documented anywhere on the download pages and can only be confirmed from this list or via the unix.html archive path described above.
 - **NVIDIA_Changelog** — the precise delta between minor releases within the branch, useful for assessing whether an update is worth taking.
 - **Installer option reference** — the full `--advanced-options` flag set, including `--kernel-source-path` and other flags relevant to custom kernel builds.
 - **INTERACTION WITH THE NOUVEAU DRIVER** — NVIDIA's own guidance on nouveau suppression, which informed the approach documented in section 6.4.3.
@@ -255,7 +272,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet nouveau.modeset=0 nvidia-drm.modeset=1"
 
 `nouveau.modeset=0` prevents Nouveau from performing a kernel modeset. Without the modeset, Nouveau's kernel module can be unloaded even if it does load, and the NVIDIA installer will not be blocked by it.
 
-`nvidia-drm.modeset=1` enables DRM kernel mode setting for the NVIDIA driver. This is required for Wayland support, PRIME render offload, and correct behaviour of several compute and display features. It should be set from the outset rather than added later.
+`nvidia-drm.modeset=1` enables DRM kernel mode setting for the NVIDIA driver. This is required for Wayland support, PRIME render offload, and correct behavior of several compute and display features. It should be set from the outset rather than added later.
 
 After editing `/etc/default/grub`, update GRUB and reboot:
 
@@ -326,7 +343,7 @@ After installation, reboot to load the new kernel module:
 sudo reboot
 ```
 
-Verify the driver is loaded and the GPU is recognised:
+Verify the driver is loaded and the GPU is recognized:
 
 ```bash
 nvidia-smi
@@ -374,17 +391,17 @@ cat /proc/driver/nvidia/version
 
 ### 6.9 References
 
-- NVIDIA Driver Downloads: https://www.nvidia.com/en-us/drivers/
-- NVIDIA Linux Drivers (branch-to-version listing): https://www.nvidia.com/en-us/drivers/unix/
-- NVIDIA Unix Driver Archive (Supported Products List per version): http://www.nvidia.com/object/unix.html
-- NVIDIA Data Center Driver Lifecycle documentation: https://docs.nvidia.com/datacenter/tesla/drivers/driver-lifecycle.html
+- [NVIDIA Driver Downloads](https://www.nvidia.com/en-us/drivers/)
+- [NVIDIA Unix Driver Archive](https://www.nvidia.com/en-us/drivers/unix/)
+- [NVIDIA Unix Driver Archive — Supported Products List](http://www.nvidia.com/object/unix.html)
+- [NVIDIA Data Center Driver Lifecycle](https://docs.nvidia.com/datacenter/tesla/drivers/driver-lifecycle.html)
+- [RTX PRO 6000 Blackwell](https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-6000/)
 - Companion guide — Kernel Build: Chapter 5 of this document
 - Companion guide — llama.cpp build (CUDA setup reference): Chapter 7 of this document
 
+## 7\. [CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit) Installation
 
-## 7\. CUDA Toolkit Installation
-
-The NVIDIA driver (`nvidia-smi`) and the CUDA toolkit (`nvcc`) are separate packages. The toolkit must be installed from NVIDIA's official Debian 12 repository before building llama.cpp.
+The NVIDIA driver (`nvidia-smi`) and the [CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit) (`nvcc`) are separate packages. The toolkit must be installed from NVIDIA's official Debian 12 repository before building llama.cpp.
 
 **Do not use** `sudo apt install nvidia-cuda-toolkit` — Debian 12 Bookworm's repos only ship CUDA 11.8, which is too old.
 
@@ -434,10 +451,14 @@ Copyright (c) 2005-2025 NVIDIA Corporation
 Cuda compilation tools, release 13.0, V13.0.88
 ```
 
+### 7.5 References
+
+- [CUDA Toolkit](https://developer.nvidia.com/cuda/toolkit)
+
 ## 8\. Models
 
 This chapter covers all models evaluated for use in this stack. Each model is documented with its
-key properties, quantisation options, llama-server configuration, and any known compatibility
+key properties, quantization options, llama-server configuration, and any known compatibility
 issues with OpenCode. Empirical VRAM measurements for all models are in Chapter 10.
 
 ### 8.1 Model Selection Criteria
@@ -451,7 +472,7 @@ Useful means at minimum 32K tokens; 96K+ is preferred for long agentic sessions.
 shell commands, and code edits as tool calls; a model that cannot reliably follow tool call
 format is not usable as a coding agent.
 
-**Licence.** Apache 2.0 or equivalent permissive licence. No research-only or non-commercial
+**License.** Apache 2.0 or equivalent permissive license. No research-only or non-commercial
 restrictions.
 
 **llama.cpp support.** The model architecture must be supported by the current mainline
@@ -462,9 +483,9 @@ lands in mainline.
 without errors. OpenCode sends multiple system messages per request; Mistral-family models with
 strict role alternation enforcement require a workaround (see §11.5).
 
-### 8.2 GGUF Sources and Reputable Quantizers
+### 8.2 [GGUF](https://github.com/ggml-org/ggml/blob/master/docs/gguf.md) Sources and Reputable Quantizers
 
-Quantised GGUF files are produced and published by third parties, not by the original model authors. The quality of the quantization — and in particular whether the embedded chat template is correct — depends on who did the work.
+Quantized [GGUF](https://github.com/ggml-org/ggml/blob/master/docs/gguf.md) files are produced and published by third parties, not by the original model authors. The quality of the quantization — and in particular whether the embedded chat template is correct — depends on who did the work.
 
 [bartowski](https://huggingface.co/bartowski) is the recommended source for Devstral and most other mainstream model quantizations. The reasons to treat this source as reputable are concrete:
 
@@ -501,71 +522,17 @@ The cases where manual template intervention is needed are:
 **Direct API access.** When hitting the `/v1/chat/completions` endpoint with a properly structured message array, llama-server applies the embedded template automatically. No manual template handling is needed in the calling code.
 
 
-### 8.4 Devstral-Small-2-24B (Primary — agentic coding specialist)
+### 8.4 openai/gpt-oss-20b (Primary — general reasoning, preferred)
 
-`mistralai/Devstral-Small-2-24B-Instruct-2512` on HuggingFace. Purpose-built for agentic
-software engineering, with training specifically targeting codebase exploration, multi-file
-editing, tool calling, and bash execution — exactly the operations OpenCode dispatches.
-
-**Key properties:**
-
-*   **SWE-Bench Verified:** 68.0% — only 4.2 points below its 123B sibling. The strongest
-    open-weight agentic coding model at this parameter count at time of writing.
-*   **Architecture:** Dense transformer, 23.6B parameters, all active per token.
-*   **Context window:** 256K tokens native. Practical limit on RTX 4090 is ~98K tokens
-    (empirically measured — see §10.3).
-*   **Tool calling:** Native structured tool call support via Jinja chat template. Requires
-    `--jinja` flag in llama-server.
-*   **OpenCode compatibility:** Requires patched chat template workaround (see §11.5).
-*   **License:** Apache 2.0.
-
-**Download:**
-
-```bash
-huggingface-cli download bartowski/mistralai_Devstral-Small-2-24B-Instruct-2512-GGUF \
-  mistralai_Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf \
-  --local-dir ~/gguf/
-```
-
-**Quantisation options on RTX 4090:**
-
-| Quantisation | Weight Size | Context at 24GB VRAM | Quality vs FP16 | Recommendation |
-| --- | --- | --- | --- | --- |
-| IQ4\_XS | ~13.5GB | ~110K tokens | ~97% (calibrated) | Max context |
-| **Q4\_K\_M** | **~14GB** | **~98K tokens** | **~95%** | **Recommended** |
-| Q5\_K\_M | ~17GB | ~54K tokens | ~97% | Quality focus |
-| Q8\_0 | ~25GB | OOM on 24GB | ~99% | Requires upgrade |
-
-All figures assume `--cache-type-k q8_0 --cache-type-v q8_0` and `--flash-attn on`. Without KV
-quantisation, usable context roughly halves.
-
-**llama-server configuration:**
-
-```bash
-llama-server \
-  --model ~/gguf/mistralai_Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf \
-  --n-gpu-layers 99 \
-  --ctx-size 98304 \
-  --cache-type-k q8_0 \
-  --cache-type-v q8_0 \
-  --flash-attn on \
-  --jinja \
-  --chat-template-file ~/gguf/devstral_chat_template_patched.jinja \
-  --port 8001 \
-  --host 127.0.0.1 2>&1 | tee -a "$LOG"
-```
-
-See §11.5 for the rationale behind `--chat-template-file` and how to produce the patched
-template. Remove this flag once OpenCode PR #15018 ships in a released version.
-
-
-### 8.5 openai/gpt-oss-20b (Primary — general reasoning, preferred)
-
-`openai/gpt-oss-20b` on HuggingFace. OpenAI's first open-weight model release (August 2025).
+[`openai/gpt-oss-20b`](https://huggingface.co/bartowski/openai_gpt-oss-20b-GGUF) on HuggingFace. OpenAI's first open-weight model release (August 2025) [[NVIDIA RTX AI Garage](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss/)].
 A mixture-of-experts reasoning model with native chain-of-thought capabilities, designed for
-agentic tasks including tool calling and code generation. Preferred over Devstral for daily use
-based on observed performance: approximately 3× faster generation, full 131K context with
-comfortable VRAM headroom, and no OpenCode compatibility issues.
+agentic tasks including tool calling and code generation. This is the preferred model for daily
+use and outperforms both Devstral-Small-2-24B and DeepSeek-R1-Distill-Qwen-14B on this hardware
+across every practical metric: approximately 3× faster generation, full 131K context with
+comfortable VRAM headroom, and no OpenCode compatibility issues. A key reason is that the MXFP4
+GGUF is not a quantized approximation of a higher-precision model — MXFP4 is the precision at
+which the MoE feed-forward layers were trained. Running this model at MXFP4 is running it at
+full quality, with no information loss relative to the released weights.
 
 **Key properties:**
 
@@ -578,8 +545,10 @@ comfortable VRAM headroom, and no OpenCode compatibility issues.
 *   **Reasoning:** Native chain-of-thought via the harmony response format. Reasoning effort
     adjustable via `Reasoning: low / medium / high` in the system prompt.
 *   **Tool calling:** Supported natively via `<|call|>` and `<|flush|>` tokens.
-*   **Quantisation:** MXFP4 is the native training precision of the MoE feed-forward layers —
-    not a post-hoc compression. The MXFP4 GGUF is the full-quality model.
+*   **Quantization:** None applied. MXFP4 is the native training precision of the MoE
+    feed-forward layers — not a post-hoc compression of a higher-precision checkpoint. Unlike
+    Devstral-Small-2-24B (Q4\_K\_M) and DeepSeek-R1-Distill-Qwen-14B (Q6\_K\_L), which are
+    quantized from FP16 originals, the MXFP4 GGUF is the full-fidelity released model.
 *   **OpenCode compatibility:** Works without modification. No chat template patching required.
 *   **License:** Apache 2.0.
 *   **Tokenizer:** GPT-4o tokenizer (BPE, 201,088 vocabulary).
@@ -622,7 +591,7 @@ llama-server \
 confirmed effective via `llama-cli` context sweep (see §10.5): context allocation at 131,072
 tokens drops from 3,126 MiB (F16) to 1,660 MiB (Q8\_0). These flags should be included.
 
-`--reasoning-format none` preserves the `analysis` and `commentary` channel outputs from the harmony response format inline in `message.content`, making them visible in OpenCode and available when the model exports a chat session (see §11.7). Without this flag, llama-server's default `auto` mode strips non-`final` channel content before returning responses to the client. There is no token or context window cost — the flag only controls how response content is surfaced.
+`--reasoning-format none` preserves the `analyzis` and `commentary` channel outputs from the harmony response format inline in `message.content`, making them visible in OpenCode and available when the model exports a chat session (see §11.7). Without this flag, llama-server's default `auto` mode strips non-`final` channel content before returning responses to the client. There is no token or context window cost — the flag only controls how response content is surfaced.
 
 **Observed performance (RTX 4090, build 8244):**
 
@@ -648,9 +617,67 @@ With F16 KV cache the context allocation is 3,126 MiB (total ~15,744 MiB, ~6,339
 See §10.5 for the full sweep data.
 
 **Chat template — harmony format.** The harmony format uses `<|start|>`, `<|message|>`,
-`<|end|>`, and `<|channel|>` tokens. Every assistant message specifies a channel (`analysis`,
+`<|end|>`, and `<|channel|>` tokens. Every assistant message specifies a channel (`analyzis`,
 `commentary`, or `final`). A `developer` role is supported for instruction framing but is
 optional — OpenCode does not send it and the model operates correctly without it.
+
+
+### 8.5 Devstral-Small-2-24B (Primary — agentic coding specializt)
+
+`mistralai/Devstral-Small-2-24B-Instruct-2512` on HuggingFace. Purpose-built for agentic
+software engineering, with training specifically targeting codebase exploration, multi-file
+editing, tool calling, and bash execution — exactly the operations OpenCode dispatches.
+
+**Key properties:**
+
+*   **SWE-Bench Verified:** 68.0% — only 4.2 points below its 123B sibling. The strongest
+    open-weight agentic coding model at this parameter count at time of writing.
+*   **Architecture:** Dense transformer, 23.6B parameters, all active per token.
+*   **Context window:** 256K tokens native. Practical limit on RTX 4090 is ~98K tokens
+    (empirically measured — see §10.3).
+*   **Tool calling:** Native structured tool call support via Jinja chat template. Requires
+    `--jinja` flag in llama-server.
+*   **OpenCode compatibility:** Requires patched chat template workaround (see §11.5).
+*   **License:** Apache 2.0.
+
+**Download:**
+
+```bash
+huggingface-cli download bartowski/mistralai_Devstral-Small-2-24B-Instruct-2512-GGUF \
+  mistralai_Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf \
+  --local-dir ~/gguf/
+```
+
+**Quantization options on RTX 4090:**
+
+| Quantization | Weight Size | Context at 24GB VRAM | Quality vs FP16 | Recommendation |
+| --- | --- | --- | --- | --- |
+| IQ4\_XS | ~13.5GB | ~110K tokens | ~97% (calibrated) | Max context |
+| **Q4\_K\_M** | **~14GB** | **~98K tokens** | **~95%** | **Recommended** |
+| Q5\_K\_M | ~17GB | ~54K tokens | ~97% | Quality focus |
+| Q8\_0 | ~25GB | OOM on 24GB | ~99% | Requires upgrade |
+
+All figures assume `--cache-type-k q8_0 --cache-type-v q8_0` and `--flash-attn on`. Without KV
+quantization, usable context roughly halves.
+
+**llama-server configuration:**
+
+```bash
+llama-server \
+  --model ~/gguf/mistralai_Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf \
+  --n-gpu-layers 99 \
+  --ctx-size 98304 \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0 \
+  --flash-attn on \
+  --jinja \
+  --chat-template-file ~/gguf/devstral_chat_template_patched.jinja \
+  --port 8001 \
+  --host 127.0.0.1 2>&1 | tee -a "$LOG"
+```
+
+See §11.5 for the rationale behind `--chat-template-file` and how to produce the patched
+template. Remove this flag once OpenCode PR #15018 ships in a released version.
 
 
 ### 8.6 DeepSeek-R1-Distill-Qwen-14B (Secondary — server confirmed, OpenCode integration pending)
@@ -660,7 +687,7 @@ distilling DeepSeek-R1's chain-of-thought capabilities into a Qwen-based 14B par
 architecture. Like gpt-oss-20b it produces explicit reasoning traces before answering, but at a
 smaller parameter count and with a different training lineage.
 
-llama-server starts cleanly with this model. OpenCode tool call behaviour has not yet been
+llama-server starts cleanly with this model. OpenCode tool call behavior has not yet been
 verified empirically.
 
 **Key properties:**
@@ -724,19 +751,31 @@ llama-server \
 *   **Prefill:** ~5,245 t/s at pp2048, declining to ~3,049 t/s at pp32768. Steeper decline
     than gpt-oss-20b due to dense full attention scaling quadratically with sequence length.
 *   **Generation:** ~70 t/s at tg128. Faster than Devstral (~55 t/s) despite heavier
-    quantisation, because 14.77B parameters move less weight per token than Devstral's 23.6B.
+    quantization, because 14.77B parameters move less weight per token than Devstral's 23.6B.
 
 **Open questions:**
 
 *   Does OpenCode's tool call format round-trip correctly through the Qwen chat template?
 *   How does coding task quality compare to gpt-oss-20b and Devstral at similar context lengths?
 
+### 8.7 References
+
+- [GGUF format specification](https://github.com/ggml-org/ggml/blob/master/docs/gguf.md)
+- [bartowski on Hugging Face](https://huggingface.co/bartowski)
+- [openai/gpt-oss-20b GGUF (bartowski)](https://huggingface.co/bartowski/openai_gpt-oss-20b-GGUF)
+- [NVIDIA RTX AI Garage — OpenAI OSS on RTX](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss/)
 
 ## 9\. Inference Backend: llama.cpp
 
-llama.cpp ([github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)) is a high-performance inference engine for large language models, providing an OpenAI-compatible REST API and broad quantisation support with full CUDA acceleration.
+llama.cpp ([github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)) is a high-performance inference engine for large language models, providing an OpenAI-compatible REST API and broad quantization support with full CUDA acceleration.
 
 ### 9.1 llama.cpp vs Ollama
+
+llama.cpp is the project; llama-server is the OpenAI-compatible HTTP server it ships as part of.
+When this document refers to llama.cpp as the inference backend, it means llama-server
+specifically — the binary that accepts REST requests, manages the loaded model, and returns
+completions. The distinction matters because [Ollama](https://ollama.com/) also uses llama.cpp internally, but wraps
+it behind its own daemon and exposes only a subset of llama-server's configuration surface.
 
 The most common alternative to llama.cpp directly is Ollama, which uses llama.cpp internally but wraps it in a model management daemon with automatic downloads, a simpler API, and broader tool ecosystem support. OpenCode documents Ollama as a supported provider. For most local inference use cases Ollama is the more ergonomic choice.
 
@@ -744,9 +783,9 @@ For this specific stack, however, three llama.cpp flags are required that Ollama
 
 **`--jinja`** — Devstral's tool call format is defined in its Jinja chat template. llama-server's `--jinja` flag activates this template rendering pipeline. Ollama uses its own template engine and does not pass this flag, which means Devstral's tool calls either fail silently or produce malformed output. Since tool dispatch is the core mechanism by which OpenCode executes every agent action — file reads, edits, bash commands, code search — this is not a recoverable limitation.
 
-**`--cache-type-k q8_0`** — KV cache quantisation is what makes long context usable on 24GB. Without it, the KV cache grows at ~0.166MB/token at FP16, limiting usable context to ~54K tokens at Q4\_K\_M. With `-ctk q8_0 -ctv q8_0`, the cost halves to ~0.083MB/token, enabling ~98K tokens at Q4\_K\_M. Ollama does not expose KV cache quantisation options.
+**`--cache-type-k q8_0`** — KV cache quantization is what makes long context usable on 24GB. Without it, the KV cache grows at ~0.166MB/token at FP16, limiting usable context to ~54K tokens at Q4\_K\_M. With `-ctk q8_0 -ctv q8_0`, the cost halves to ~0.083MB/token, enabling ~98K tokens at Q4\_K\_M. Ollama does not expose KV cache quantization options.
 
-**`--ctx-size`** — Ollama defaults all models to a 4,096-token context window regardless of what the model supports. This can be partially worked around by writing a custom `Modelfile` with `PARAMETER num_ctx 32768`, but this does not interact with KV cache quantisation and the workaround is separate from the `--jinja` issue.
+**`--ctx-size`** — Ollama defaults all models to a 4,096-token context window regardless of what the model supports. This can be partially worked around by writing a custom `Modelfile` with `PARAMETER num_ctx 32768`, but this does not interact with KV cache quantization and the workaround is separate from the `--jinja` issue.
 
 The net effect of using Ollama with Devstral on this hardware would be: no reliable tool calls, and approximately one-third of the available context. If a future Ollama release exposes these flags, the choice can be revisited — the ergonomic advantages are real. Until then, llama.cpp directly is the correct inference backend for this stack.
 
@@ -785,11 +824,11 @@ cmake --build build --config Release -j$(nproc)
 
 `-DGGML_CUDA=ON` — enables the CUDA backend. The flag is prefixed `GGML_` because CUDA support is implemented at the ggml tensor library layer, not the llama.cpp layer.
 
-`-DCMAKE_CUDA_ARCHITECTURES=89` — targets compute capability 8.9, which is the Ada Lovelace architecture used by the RTX 4090. Targeting specifically avoids compiling for every GPU generation and produces a more optimised binary.
+`-DCMAKE_CUDA_ARCHITECTURES=89` — targets compute capability 8.9, which is the Ada Lovelace architecture used by the RTX 4090. Targeting specifically avoids compiling for every GPU generation and produces a more optimized binary.
 
-`-DCMAKE_BUILD_TYPE=Release` — enables full compiler optimisations.
+`-DCMAKE_BUILD_TYPE=Release` — enables full compiler optimizations.
 
-`-DGGML_CUDA_FA_ALL_QUANTS=ON` — enables Flash Attention support for all quantisation types, including Q4\_K\_M and Q8\_0 KV cache quantisation. Without this flag, `--flash-attn on` may fall back silently to non-Flash-Attention paths for quantised types, reducing the effectiveness of the context window optimisations in Section 9.
+`-DGGML_CUDA_FA_ALL_QUANTS=ON` — enables Flash Attention support for all quantization types, including Q4\_K\_M and Q8\_0 KV cache quantization. Without this flag, `--flash-attn on` may fall back silently to non-Flash-Attention paths for quantized types, reducing the effectiveness of the context window optimizations in Section 9.
 
 ### 9.3 Installing llama.cpp with checkinstall
 
@@ -870,7 +909,7 @@ To verify apt is tracking the package: `dpkg -l | grep llama`. To remove: `sudo 
 
 ### 9.4 Downloading the Model
 
-The recommended source for Devstral GGUFs is the `bartowski` repository on HuggingFace, which produces high-quality quantisations for Mistral models.
+The recommended source for Devstral GGUFs is the `bartowski` repository on HuggingFace, which produces high-quality quantizations for Mistral models.
 
 **Create the virtual environment (once):**
 
@@ -890,37 +929,140 @@ python3 -m venv ~/venv/huggingface
 
 ### 9.5 Starting the Server
 
-The default model is gpt-oss-20b MXFP4. Start the server with:
+The default model is gpt-oss-20b MXFP4. The reference launch script is
+`llama-server-openai_gpt-oss-20b-MXFP4.sh`, which encodes the configuration decisions
+below. The core invocation is:
 
 ```bash
-LOG=~/logs/llama-server-gpt-oss-20b-$(date '+%Y%m%d_%H%M%S').log
-echo "=== Server started: $(date '+%Y-%m-%d %H:%M:%S %Z') ===" > "$LOG"
+model=openai_gpt-oss-20b-MXFP4
+CTX_LEN=131072
+SLOTS=4
+TMP=/tmp/llama-server
+
+mkdir -p ${TMP}/log ${TMP}/slots
+
+timestamp=$(date '+%Y%m%d_%H%M%S')
+LOG_FILE=${TMP}/log/llama-server_${model}_${timestamp}.txt
+
+log() { echo "[$(hostname)] $*"; }
+
+log "=== Server started: ${timestamp} ===" > ${LOG_FILE}
+log "llama-server --version: $(llama-server --version 2>&1 | tr -s ' \n' ' ' | xargs)" >> ${LOG_FILE}
+
+CTX_SIZE=$(python3 -c "print(${SLOTS} * ${CTX_LEN})")
+
 llama-server \
-  --model ~/gguf/openai_gpt-oss-20b-MXFP4.gguf \
+  --model ~/gguf/${model}.gguf \
   --n-gpu-layers 99 \
-  --ctx-size 0 \
+  --ctx-size ${CTX_SIZE} \
+  --parallel ${SLOTS} \
+  --kv-unified \
   --cache-type-k q8_0 \
   --cache-type-v q8_0 \
   --flash-attn on \
   --jinja \
-  --reasoning-format none \
   --batch-size 4096 \
   --ubatch-size 1024 \
+  --slot-save-path ${TMP}/slots \
+  --log-prefix \
+  --log-verbose \
+  --log-timestamps \
   --port 8001 \
-  --host 127.0.0.1 2>&1 | tee -a "$LOG"
+  --host 127.0.0.1 2>&1 | tee -a ${LOG_FILE}
 ```
 
-`--n-gpu-layers 99` is the conventional instruction to offload all layers to GPU; llama.cpp caps it at the model's actual layer count. `--ctx-size 0` resolves to the full 131,072 trained context. `--reasoning-format none` preserves the harmony format's channel outputs inline in `message.content` so they are visible in OpenCode and included in chat exports (see §11.7). The server exposes an OpenAI-compatible REST API at `http://127.0.0.1:8001/v1` once loaded.
+**Flag rationale:**
 
-To start with Devstral instead, substitute the model path and adjust flags as specified in §8.4. To start with DeepSeek-R1-14B, see §8.6.
+`--n-gpu-layers 99` offloads all layers to GPU; llama.cpp caps it at the model's actual layer
+count. `--ctx-size ${CTX_SIZE}` is set to `SLOTS × CTX_LEN` (4 × 131,072 = 524,288). In
+`--kv-unified` mode this allocates a shared pool of 524,288 KV cells; each slot draws from this
+pool up to its per-slot context limit, which is capped by llama-server at the model's training
+context (131,072 tokens). The effective result is 4 slots each with the full 131,072-token
+context, sharing a unified pool (see §9.6). `--parallel 4` sets the slot count explicitly;
+without `--kv-unified` the pool would instead be partitioned as 131,072 tokens per slot with no
+sharing. `--slot-save-path` is required to enable the KV cache flush API used by the regression
+harness (see §9.6). `--reasoning-format none` is not set by default — omitting it preserves
+chain-of-thought output in the TUI; add it if reasoning tokens should be suppressed from the
+OpenCode display. The server exposes an OpenAI-compatible REST API at `http://127.0.0.1:8001/v1`
+once loaded.
 
-## 10\. Context Window and KV Cache Quantisation
+To start with Devstral instead, substitute the model path and adjust flags as specified in §8.4.
+To start with DeepSeek-R1-14B, see §8.6.
 
-VRAM must be split between model weights and the KV cache — the attention keys and values for all previous tokens, which must be retained to avoid recomputing them on every generation step. The KV cache cost per token varies by model architecture: Devstral Q4\_K\_M costs 0.083 MiB/token at Q8\_0, DeepSeek-R1-Distill-Qwen-14B Q6\_K\_L costs 0.100 MiB/token at Q8\_0, and gpt-oss-20b MXFP4 costs 0.023 MiB/token at F16 — a consequence of its MoE architecture's compact per-head dimensions. Empirical sweep data for each model is in §10.3–§10.5.
+### 9.6 llama-server Slot Architecture
 
-KV cache quantisation (`--cache-type-k q8_0 --cache-type-v q8_0`) reduces the per-token cost by a consistent ~1.88× across all three models — empirically confirmed by sweep data in §10.3–§10.5. The flags are effective for gpt-oss-20b despite its hybrid SWA/global architecture; an earlier startup log suggesting otherwise was misleading.
+A **slot** is a conversation handle — a reserved position in llama-server's scheduling queue
+that can hold one active conversation's state. The slot count is controlled by `--parallel N`.
+When `--parallel` is omitted, llama-server auto-detects `n_parallel = 4` and sets
+`kv_unified = true` (hardcoded in `server.cpp`). When `--parallel N` is specified explicitly,
+`kv_unified` defaults to `false` unless `--kv-unified` is also passed.
 
-| Quantisation | KV Cache | Usable Context | Notes |
+**KV cache allocation modes:**
+
+In **unified mode** (`--kv-unified`), a single shared pool is allocated sized by `--ctx-size`.
+All slots draw from this pool dynamically; each slot's per-slot context is capped at the model's
+training context length regardless of `--ctx-size`. Adding more slots in unified mode does not
+increase total KV allocation — it only adds scheduling positions. Empirically, running
+`--parallel 4`, `--parallel 8`, and `--parallel 16` all produced identical total KV allocation
+(1,632 MiB non-SWA at Q8_0, `--ctx-size 131,072`) — the slot count is essentially free from a
+VRAM perspective in this mode.
+
+In **non-unified mode** (the default when `--parallel` is set explicitly without `--kv-unified`),
+the pool is divided equally: each slot receives `ctx_size / n_parallel` tokens. This silently
+reduces per-slot context — `--ctx-size 131,072 --parallel 8` without `--kv-unified` gives each
+slot only 16,384 tokens. Always pair `--parallel` with `--kv-unified` unless partitioned context
+is intentional.
+
+**Slots are not threads.** CPU threads increase throughput by running on separate cores. Slots do
+not — all active sequences are batched into a single GPU forward pass. There is no separate
+compute path per slot. Adding slots increases *concurrency* (how many conversations can be
+in-flight simultaneously) without adding compute capacity. Throughput per token is determined by
+model size and GPU memory bandwidth, not slot count.
+
+**Slot concurrency and parallel agents.** With 4 slots, the server can hold 4 simultaneous
+conversations without evicting any KV cache state. For OpenCode, this means 4 concurrent
+sessions, or — once OpenCode raises its current 1-agent-in-parallel limit — up to 4 simultaneous
+subagents each maintaining independent context. The `--parallel 4 --kv-unified` configuration
+is directly aligned with this future capability.
+
+**KV cache flush API.** llama-server exposes per-slot KV cache erasure via:
+
+```
+POST /slots/{id}?action=erase&id_slot={id}
+```
+
+Note that `action` and `id_slot` are query parameters, not JSON body fields. This requires
+`--slot-save-path` to be set at startup (the flag gates the endpoint regardless of whether
+save/restore is actually used). To flush all slots:
+
+```bash
+for i in $(seq 0 $((SLOTS - 1))); do
+    curl -s -X POST "http://127.0.0.1:8001/slots/${i}?action=erase&id_slot=${i}"
+done
+```
+
+The regression harness (`tests/conftest.py`) calls this automatically before each test via a
+`flush_llama_kv_cache` autouse fixture, preventing KV cache state from prior tests bleeding into
+subsequent ones (see `opencode_pytest_harness` repository).
+
+**Reasoning level.** gpt-oss-20b supports three reasoning effort levels set via the system
+prompt: `Reasoning: low` (fast, general dialogue), `Reasoning: medium` (balanced), and
+`Reasoning: high` (deep analysis). In OpenCode, add the directive to the relevant agent's prompt
+file — for example, adding `Reasoning: medium` to `tools/opencode/prompts/build.txt`.
+
+### 9.7 References
+
+- [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)
+- [Ollama](https://ollama.com/)
+- [gpt-oss reasoning levels](https://huggingface.co/openai/gpt-oss-120b)
+
+## 10\. Context Window and KV Cache Quantization
+
+VRAM must be split between model weights and the KV cache — the attention keys and values for all previous tokens, which must be retained to avoid recomputing them on every generation step. The KV cache cost per token varies by model architecture: Devstral Q4\_K\_M costs 0.083 MiB/token at Q8\_0, DeepSeek-R1-Distill-Qwen-14B Q6\_K\_L costs 0.100 MiB/token at Q8\_0, and gpt-oss-20b MXFP4 costs 0.013 MiB/token at Q8\_0 — a consequence of its MoE architecture's compact per-head dimensions (8 KV heads, 64-dim heads). Empirical sweep data for each model is in §10.3–§10.5.
+
+KV cache quantization (`--cache-type-k q8_0 --cache-type-v q8_0`) reduces the per-token cost by a consistent ~1.88× across all three models — empirically confirmed by sweep data in §10.3–§10.5. The flags are effective for gpt-oss-20b despite its hybrid SWA/global architecture; an earlier startup log suggesting otherwise was misleading.
+
+| Quantization | KV Cache | Usable Context | Notes |
 | --- | --- | --- | --- |
 | Q5\_K\_M | FP16 | ~35K tokens | Reduced headroom; not recommended |
 | Q5\_K\_M | q8\_0 | ~54K tokens | Workable; context-constrained for large refactors |
@@ -928,13 +1070,13 @@ KV cache quantisation (`--cache-type-k q8_0 --cache-type-v q8_0`) reduces the pe
 | **Q4\_K\_M** | **q8\_0** | **~98K tokens** | **Recommended configuration** |
 | IQ4\_XS | q8\_0 | ~110K tokens | Maximum context on 24GB; marginal quality tradeoff |
 
-### 10.1 Flash Attention and KV Cache Quantisation
+### 10.1 Flash Attention and KV Cache Quantization
 
-Flash Attention and KV cache quantisation are not independent — Flash Attention is a prerequisite for KV cache quantisation in llama.cpp.
+Flash Attention and KV cache quantization are not independent — Flash Attention is a prerequisite for KV cache quantization in llama.cpp.
 
-Flash Attention restructures how the attention computation accesses memory, processing the KV cache in tiles rather than materialising the full attention matrix at once. This tiled access pattern is what makes it possible to work with quantised (non-native) KV cache formats efficiently — dequantisation can happen on the fly within each tile without a separate pass.
+Flash Attention restructures how the attention computation accesses memory, processing the KV cache in tiles rather than materialising the full attention matrix at once. This tiled access pattern is what makes it possible to work with quantized (non-native) KV cache formats efficiently — dequantization can happen on the fly within each tile without a separate pass.
 
-Without `--flash-attn on`, llama.cpp requires the KV cache to be in a format the standard attention kernel can use directly, which means F16 or F32. Specifying `--cache-type-k q8_0` without Flash Attention may silently fall back to F16, or may error — the behaviour has varied across llama.cpp versions.
+Without `--flash-attn on`, llama.cpp requires the KV cache to be in a format the standard attention kernel can use directly, which means F16 or F32. Specifying `--cache-type-k q8_0` without Flash Attention may silently fall back to F16, or may error — the behavior has varied across llama.cpp versions.
 
 The practical implication is that `--flash-attn on`, `-ctk q8_0`, and `-ctv q8_0` must always be specified together. They are a single logical unit, not three independent options.
 
@@ -1014,17 +1156,17 @@ Context scales linearly at **0.083 MiB/token**. The safe maximum is **98,304 tok
 | 49152 | 7680 | 4080 | 1.88× |
 | 57344 | OOM | 4760 | — |
 
-The F16/Q8\_0 ratio is a consistent **1.88×** across all measured context sizes — slightly less than the theoretical 2.0×. The delta is attributable to per-block metadata overhead in the Q8\_0 format: each quantised block carries a scale factor with no equivalent in F16, reducing the effective compression ratio from 2.0× to ~1.88×.
+The F16/Q8\_0 ratio is a consistent **1.88×** across all measured context sizes — slightly less than the theoretical 2.0×. The delta is attributable to per-block metadata overhead in the Q8\_0 format: each quantized block carries a scale factor with no equivalent in F16, reducing the effective compression ratio from 2.0× to ~1.88×.
 
 The compute allocation varies across runs (266–364 MiB) without a clean relationship to context size, consistent across both KV cache configurations. This is runtime allocation jitter, not a systematic effect.
 
-Without Q8\_0 KV cache quantisation, the practical context ceiling on 24GB VRAM is ~49K tokens (last successful F16 step). With Q8\_0, it is **98K tokens** — 1.72× more usable context. KV cache quantisation is not optional at this context size; it is what makes long context possible.
+Without Q8\_0 KV cache quantization, the practical context ceiling on 24GB VRAM is ~49K tokens (last successful F16 step). With Q8\_0, it is **98K tokens** — 1.72× more usable context. KV cache quantization is not optional at this context size; it is what makes long context possible.
 
 ### 10.4 DeepSeek-R1-Distill-Qwen-14B-Q6\_K\_L VRAM Measurements
 
 Context sweep for `DeepSeek-R1-Distill-Qwen-14B-Q6_K_L.gguf` on the RTX 4090, using the same methodology as Section 10.3. Total VRAM: 24,077 MiB. Unaccounted (CUDA runtime + display output): ~1,750 MiB.
 
-The Q6\_K\_L quantisation weighs in at 11,128 MiB — approximately 2,174 MiB lighter than Devstral Q4\_K\_M (13,302 MiB), which opens up meaningful additional headroom for the KV cache.
+The Q6\_K\_L quantization weighs in at 11,128 MiB — approximately 2,174 MiB lighter than Devstral Q4\_K\_M (13,302 MiB), which opens up meaningful additional headroom for the KV cache.
 
 **F16 KV cache (default):**
 
@@ -1184,6 +1326,42 @@ These are far lower than any of the dense models, driven by compact per-head KV 
 
 gpt-oss-20b achieves a 33% larger context window, a KV cache 5–6× smaller, and nearly 7.8 GiB
 of free headroom at its ceiling — versus under 1 GiB for the dense models at theirs.
+
+**Multi-slot context pool sweep (`--parallel N --kv-unified`):**
+
+The 7.8 GiB of free headroom at single-slot operation enables multi-slot configurations using a
+shared context pool. With `--kv-unified`, the total KV allocation is fixed by `--ctx-size`
+regardless of slot count — slots share the pool rather than each owning a private allocation
+(see §9.6). The binding constraint when scaling `--ctx-size` beyond 131,072 is the compute
+buffer, which grows approximately linearly at ~768 MiB per additional 131,072 tokens of context,
+not the KV cache itself.
+
+Binary search on the OOM boundary at `--parallel 16 --kv-unified`:
+
+| `--ctx-size` | Multiple | KV non-SWA (MiB) | Compute buf (MiB) | Total used (MiB) | Free (MiB) | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| 131,072 | 1× | 1,632 | 831 | 13,448 | 8,501 | ✓ |
+| 262,144 | 2× | 3,264 | 1,597 | 15,848 | 6,142 | ✓ |
+| 393,216 | 3× | 4,896 | 2,365 | 18,248 | 3,740 | ✓ |
+| 458,752 | 3.5× | 5,712 | 2,749 | 19,448 | 2,542 | ✓ |
+| 524,288 | 4× | 6,528 | 3,133 | 20,648 | 1,345 | ✓ (tight) |
+| 655,360 | 5× | 8,160 | 3,901 | 23,048 | — | ✗ OOM |
+| 786,432 | 6× | 9,792 | 4,669 | 25,448 | — | ✗ OOM |
+
+The OOM boundary lies between 524,288 and 655,360 tokens. At 524,288 only 1,345 MiB remains
+free — marginal for a shared workstation. The recommended operational configuration is
+`--ctx-size 393,216` (3×), which leaves 3,740 MiB free and comfortably supports 4 concurrent
+full-context sessions.
+
+Note: setting `--ctx-size N --parallel P` does not give P slots at N tokens each. llama-server
+caps per-slot context at the model's training context (131,072 tokens), logging: *"the slot
+context exceeds the training context of the model — capping"*. The pool holds N cells total,
+shared across P slots, but no single conversation can exceed 131,072 tokens. The `--ctx-size`
+scaling is therefore a pool capacity choice, not a per-slot context extension.
+
+The production launch script (`llama-server-openai_gpt-oss-20b-MXFP4.sh`) uses
+`--ctx-size 524,288 --parallel 4`, which is empirically tight but within budget for a dedicated
+inference machine. Reduce to `--ctx-size 393,216` for a more conservative margin.
 
 
 ## 11\. Agent Frontend: OpenCode
@@ -1398,7 +1576,7 @@ enforces role alternation:
 {%- endif -%}
 ```
 
-The second rejects unrecognised roles:
+The second rejects unrecognized roles:
 
 ```jinja
 {%- else -%}
@@ -1472,7 +1650,7 @@ OpenCode has a native `/export` command that saves the current session as a mark
 /export
 ```
 
-A dialogue appears with the following options:
+A dialog appears with the following options:
 
 - **Filename** — editable text field, defaults to `session-<session-id>.md`
 - **Include thinking** — includes the model's reasoning traces, rendered as italicised `_Thinking:_` sections
@@ -1485,6 +1663,12 @@ All three content checkboxes are enabled by default. Press return to confirm; th
 **Export format.** The exported markdown uses a consistent structure: session title and metadata at the top, then each turn as a `## User` or `## Assistant` heading. Assistant turns include a metadata line showing the agent mode, model, and response time. Thinking blocks appear inline as `_Thinking:_ ... text ...`. Tool calls appear as `**Tool: toolname**` with `**Input:**` and `**Output:**` subsections.
 
 **Reasoning traces.** The `/export` command captures thinking blocks through OpenCode's own display layer, independently of llama-server's `--reasoning-format` flag. Reasoning traces appear in exports regardless of whether `--reasoning-format none` is set on the server. The `--reasoning-format none` flag remains useful for making reasoning visible in the live OpenCode UI during a session, but is not a prerequisite for reasoning to appear in exports.
+
+### 11.8 References
+
+- [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
+- [Issue #5034](https://github.com/anomalyco/opencode/issues/5034)
+- [PR #15018](https://github.com/anomalyco/opencode/pull/15018)
 
 ## 12\. Workflow Framework: Superpowers
 
@@ -1576,7 +1760,11 @@ Superpowers manages context window growth through two mechanisms that prevent a 
 
 **Incremental file loading:** Files are loaded into context explicitly when needed and dropped when they are not. The full codebase is never held simultaneously.
 
-The practical implication is that individual subagent context windows should remain well within the 98K ceiling even in long sessions. The Superpowers skill document overhead is estimated at 3–6K tokens per session. Empirical characterisation of actual context consumption across a full development session is identified as future work (see Section 16).
+The practical implication is that individual subagent context windows should remain well within the 98K ceiling even in long sessions. The Superpowers skill document overhead is estimated at 3–6K tokens per session. Empirical characterization of actual context consumption across a full development session is identified as future work (see Section 16).
+
+### 12.5 References
+
+- [github.com/obra/superpowers](https://github.com/obra/superpowers)
 
 ## 13\. Language Servers and MCP
 
@@ -1606,7 +1794,7 @@ The practical consequence of the stdio design shared by both LSP and MCP is that
 
 ### 13.2 Language Servers (LSP)
 
-A language server is a background process that maintains a live semantic model of your codebase. Where a plain file read gives the model text, a language server gives it meaning: symbol tables, type information, call graphs, and import resolution. The Language Server Protocol standardises communication so a single server implementation works with any compatible editor or agent.
+A language server is a background process that maintains a live semantic model of your codebase. Where a plain file read gives the model text, a language server gives it meaning: symbol tables, type information, call graphs, and import resolution. The [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) standardizes communication so a single server implementation works with any compatible editor or agent.
 
 OpenCode has LSP support built in. Language servers run as separate CPU processes and are queried by OpenCode when the agent needs semantic operations — go-to-definition, find all references, rename across project, type-aware completions, and real-time diagnostics. This provides a layer of code intelligence that is independent of what the model alone can infer from file contents. Resource usage is modest: `rust-analyzer` on a large Rust project may use 1–2 GB of system RAM and spike CPU during re-indexing; `pyright` and `clangd` are lighter. Between requests they are essentially idle.
 
@@ -1614,15 +1802,17 @@ Recommended language servers by language:
 
 | Language | Server | Install |
 | --- | --- | --- |
-| Rust | rust-analyzer | `rustup component add rust-analyzer` |
-| Python | pyright | `npm i -g pyright` |
-| TypeScript / JavaScript | typescript-language-server | `npm i -g typescript-language-server` |
-| C / C++ | clangd | `sudo apt install clangd` |
-| Go | gopls | `go install golang.org/x/tools/gopls@latest` |
-| Lua | lua-language-server | Via GitHub releases |
-| Docker / Compose / Bake | docker-language-server | `go install github.com/docker/docker-language-server/cmd/docker-language-server@latest` |
+| Rust | [rust-analyzer](https://github.com/rust-lang/rust-analyzer) | `rustup component add rust-analyzer` |
+| Python | [pyright](https://github.com/microsoft/pyright) | `npm i -g pyright` |
+| TypeScript / JavaScript | [typescript-language-server](https://github.com/typescript-language-server/typescript-language-server) | `npm i -g typescript-language-server` |
+| C / C++ | [clangd](https://github.com/clangd/clangd) | `sudo apt install clangd` |
+| Go | [gopls](https://github.com/golang/tools/tree/master/gopls) | `go install golang.org/x/tools/gopls@latest` |
+| Lua | [lua-language-server](https://github.com/LuaLS/lua-language-server) | Via GitHub releases |
+| Docker / Compose / Bake | [docker-language-server](https://github.com/docker/docker-language-server) | `go install github.com/docker/docker-language-server/cmd/docker-language-server@latest` |
 
 Language servers are language-specific and stateful — each one maintains a persistent index of the project. They do not need configuration in OpenCode beyond ensuring the binary is on PATH; OpenCode detects and activates them automatically based on the file types in the current workspace.
+
+**Note on pyright:** Pyright is both a static type checker and a full LSP server — it is the engine behind Pylance in VS Code. In LSP mode it exposes the same type inference it uses for static analyzis: go-to-definition, find all references, type-aware completions, import resolution, and real-time diagnostics. For Python-focused development it is the recommended choice; the type checking *is* the language intelligence it surfaces over LSP. Install via `npm i -g pyright`; no additional configuration is required for OpenCode to activate it on Python workspaces.
 
 **Note on Docker language servers:** `docker-language-server` is the official Docker-published server and covers Dockerfiles, Docker Compose files, and Bake files. An older alternative, `dockerfile-language-server` by rcjsuen (`npm i -g dockerfile-language-server-nodejs`), covers Dockerfiles only. The official server is the better choice for new installations. Both address file authoring only — syntax, completions, and diagnostics. Managing running containers at runtime requires an MCP server (see §13.8).
 
@@ -1642,7 +1832,7 @@ Positive signals to look for, in rough priority order:
 
 **Professional affiliation or track record** — An author with a verifiable professional background in the relevant domain, or a prior record of maintained packages, reduces abandonment risk. This is not a formal designation — it is earned trust, established through a public record of professional-quality work that others have validated over time.
 
-**Licence** — MIT or Apache 2.0. Avoid packages with ambiguous, research-only, or non-commercial licences.
+**License** — MIT or Apache 2.0. Avoid packages with ambiguous, research-only, or non-commercial licenses.
 
 **Minimal footprint** — Prefer packages that do one thing and expose it over stdio. Packages that require persistent daemons, remote accounts, or non-local network access contradict the local-first principle of the stack.
 
@@ -1651,7 +1841,7 @@ When multiple packages satisfy these criteria, prefer the one with the highest c
 
 ### 13.4 Model Context Protocol (MCP)
 
-MCP ([modelcontextprotocol.io](https://modelcontextprotocol.io)) is an open protocol that standardises how agents dispatch tool calls to external services. Where LSP answers questions about code semantics, MCP extends what the agent can _do_ — searching the web, reading a knowledge base, provisioning cloud infrastructure, or querying any service with an MCP server.
+MCP ([modelcontextprotocol.io](https://modelcontextprotocol.io)) is an open protocol, developed and maintained by Anthropic, that standardizes how agents dispatch tool calls to external services. Where LSP answers questions about code semantics, MCP extends what the agent can _do_ — searching the web, reading a knowledge base, provisioning cloud infrastructure, or querying any service with an MCP server.
 
 MCP servers are ordinary CPU processes — typically small Node.js or Python scripts — that communicate with OpenCode over stdio. They run entirely on the host CPU and system RAM, with negligible footprint: a few tens of MB of RAM and minimal CPU when actively handling a request, essentially idle between requests. The GPU is not involved; MCP servers complete their work before llama-server is invoked for the next generation step.
 
@@ -1761,7 +1951,7 @@ The MCP panel should show `mcp-git connected`.
 
 > **Status: stub.** This section will be completed when a PostgreSQL database is set up as part of a project. The configuration pattern and credential management approach are documented here for reference.
 
-The recommended MCP server for local PostgreSQL access is `@modelcontextprotocol/server-postgres`, the official reference implementation from the MCP project. It provides read-only access — schema inspection and SELECT queries — with no risk of modifying data. Write access can be added later by switching to `crystaldba/postgres-mcp`, which supports configurable read/write access and adds performance analysis tools (explain plans, index tuning).
+The recommended MCP server for local PostgreSQL access is `@modelcontextprotocol/server-postgres`, the official reference implementation from the MCP project. It provides read-only access — schema inspection and SELECT queries — with no risk of modifying data. Write access can be added later by switching to `crystaldba/postgres-mcp`, which supports configurable read/write access and adds performance analyzis tools (explain plans, index tuning).
 
 The connection string contains a password and must not be hardcoded in `opencode.json`. The same wrapper script pattern used for Trilium (§13.8.5) applies here: store the password in `pass`, construct the connection string at spawn time.
 
@@ -1811,7 +2001,7 @@ For a privacy-preserving web search capability, the recommended approach is a se
 OpenCode ←—stdio—→ mcp-searxng ←—HTTP—→ SearXNG (Docker, TCP :8080)
 ```
 
-**MCP server selection.** `ihor-sokoliuk/mcp-searxng` (npm package `mcp-searxng`) is the recommended proxy. It meets all package selection criteria from §13.3: 500+ stars, 80+ forks, active maintenance, MIT licence, stdio transport, single env var configuration, and no persistent daemon. It also provides URL content fetching with caching alongside the search tool.
+**MCP server selection.** `ihor-sokoliuk/mcp-searxng` (npm package `mcp-searxng`) is the recommended proxy. It meets all package selection criteria from §13.3: 500+ stars, 80+ forks, active maintenance, MIT license, stdio transport, single env var configuration, and no persistent daemon. It also provides URL content fetching with caching alongside the search tool.
 
 #### 13.7.1 SearXNG Configuration
 
@@ -1849,7 +2039,7 @@ Two settings are required for programmatic localhost use: `limiter: false` disab
 
 SearXNG releases from approximately early 2026 onwards switched from uWSGI to **granian** as the WSGI server. Granian unconditionally attempts to bind a dual-stack (IPv4+IPv6) socket on startup, which fails immediately with `RuntimeError: Address family not supported by protocol (os error 97)` on kernels where IPv6 is fully disabled via `ipv6.disable=1`.
 
-The fix is to pass `GRANIAN_HOST=0.0.0.0` as a Docker environment variable. This tells granian to bind an IPv4-only socket, bypassing the dual-stack attempt entirely. The variable is passed through by SearXNG's container entrypoint — this is documented behaviour: `$GRANIAN_*` environment variables configure the granian server directly.
+The fix is to pass `GRANIAN_HOST=0.0.0.0` as a Docker environment variable. This tells granian to bind an IPv4-only socket, bypassing the dual-stack attempt entirely. The variable is passed through by SearXNG's container entrypoint — this is documented behavior: `$GRANIAN_*` environment variables configure the granian server directly.
 
 This workaround is required on this machine (IPv6 disabled at kernel level via GRUB parameter). It is not needed on machines with IPv6 enabled.
 
@@ -2088,11 +2278,17 @@ Search my Trilium notes for "test"
 
 A response drawing on actual note content confirms the full round-trip is functional.
 
+#### 13.8.7 Mermaid Diagrams via Trilium Note Types
+
+Trilium supports typed notes, including a dedicated Mermaid note type that renders diagrams natively in the UI. This creates a clean workflow for generating diagrams from within OpenCode: the agent produces Mermaid syntax, then instructs `trilium-bolt` to create a new note with type `mermaid` and the diagram source as the note body. Trilium renders the diagram automatically when the note is opened — no export step, no browser, no additional tooling required.
+
+The workflow is entirely conversational. Ask OpenCode to diagram a system, module, or data flow, then ask it to save the result as a Mermaid note in Trilium. `trilium-bolt`'s note creation tool accepts note type as a parameter, so the agent targets the correct type directly. Diagram capability is therefore free with the `trilium-bolt` integration already in place — nothing additional to install or configure.
+
 ### 13.9 AWS
 
 AWS publishes an official open-source MCP suite at `awslabs/mcp` ([github.com/awslabs/mcp](https://github.com/awslabs/mcp)). For a privacy-preserving local configuration, the open-source stdio-based servers are appropriate — credentials stay on the local machine and are never routed through AWS-hosted infrastructure.
 
-The suite includes specialised servers for individual services (CDK, S3, CloudWatch, EKS, ECS, cost analysis) as well as a unified AWS MCP Server that consolidates documentation access, API execution across 15,000+ AWS APIs, and pre-built Agent SOPs for common multi-step tasks.
+The suite includes specialized servers for individual services (CDK, S3, CloudWatch, EKS, ECS, cost analyzis) as well as a unified AWS MCP Server that consolidates documentation access, API execution across 15,000+ AWS APIs, and pre-built Agent SOPs for common multi-step tasks.
 
 Authentication uses standard AWS IAM credentials. The recommended approach is SSO-based dynamic credentials rather than static access keys.
 
@@ -2134,7 +2330,7 @@ Three options are available at different levels of scope and setup complexity.
 
 **Comprehensive Docker MCP server** — Exposes 33 Docker tools covering container, image, network, volume, and system management. Includes a three-tier safety classification (safe / moderate / destructive) with confirmation required before destructive operations execute. This safety property is meaningful when an agent is driving container operations autonomously during a Superpowers session.
 
-**Docker MCP Toolkit (official)** — Docker's own MCP Gateway infrastructure, which acts as a centralised proxy managing multiple MCP servers, credentials, and lifecycle. Docker's documentation explicitly lists OpenCode as a supported client. The OpenCode configuration entry is:
+**Docker MCP Toolkit (official)** — Docker's own MCP Gateway infrastructure, which acts as a centralized proxy managing multiple MCP servers, credentials, and lifecycle. Docker's documentation explicitly lists OpenCode as a supported client. The OpenCode configuration entry is:
 
 ```json
 {
@@ -2149,6 +2345,22 @@ Three options are available at different levels of scope and setup complexity.
 ```
 
 The Toolkit approach is more involved to set up but provides access to Docker's full curated catalog of verified MCP servers beyond Docker management alone — Stripe, Grafana, Elastic, and others are available through the same gateway. For the immediate goal of container management only, `docker-mcp` is the quickest path.
+
+### 13.11 References
+
+- [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+- [rust-analyzer](https://github.com/rust-lang/rust-analyzer)
+- [pyright](https://github.com/microsoft/pyright)
+- [typescript-language-server](https://github.com/typescript-language-server/typescript-language-server)
+- [clangd](https://github.com/clangd/clangd)
+- [gopls](https://github.com/golang/tools/tree/master/gopls)
+- [lua-language-server](https://github.com/LuaLS/lua-language-server)
+- [docker-language-server](https://github.com/docker/docker-language-server)
+- [modelcontextprotocol.io](https://modelcontextprotocol.io)
+- [github.com/searxng/searxng](https://github.com/searxng/searxng)
+- [github.com/mursilsayed/trilium-bolt](https://github.com/mursilsayed/trilium-bolt)
+- [github.com/awslabs/mcp](https://github.com/awslabs/mcp)
+- [github.com/QuantGeekDev/docker-mcp](https://github.com/QuantGeekDev/docker-mcp)
 
 ## 14\. Performance: Memory Bandwidth
 
@@ -2188,7 +2400,7 @@ despite similar file sizes.
 
 Because the formula produces materially different results per model, estimated t/s figures for
 other GPUs are only meaningful when tied to a specific model and validated against empirical
-data. The hardware characteristics table below shows bandwidth and VRAM only; for measured
+data. The hardware characteriztics table below shows bandwidth and VRAM only; for measured
 performance figures see §14.2 (gpt-oss-20b cross-hardware comparison) and §14.6 (cross-model
 summary on the RTX 4090).
 
@@ -2443,7 +2655,7 @@ architecture limits attention cost for most layers and partly accounts for its m
 prefill throughput.
 
 Generation at tg128 (~70 t/s) is faster than Devstral (~55 t/s) despite Q6\_K being a
-heavier quantisation than Q4\_K\_M. This is expected: 14.77B parameters move less weight per
+heavier quantization than Q4\_K\_M. This is expected: 14.77B parameters move less weight per
 token than Devstral's 23.6B, so the bandwidth-bound generation ceiling is higher. The
 theoretical ceiling is approximately 1,008 GB/s ÷ 11.64 GiB ≈ 84 t/s; ~70 t/s at tg128
 represents reasonable efficiency.
@@ -2484,7 +2696,7 @@ pp32768 range, consistent with standard quadratic attention scaling. DeepSeek's 
 decline likely reflects its larger KV head dimensions (1,024 MiB/token vs Devstral's lower
 per-token cost) amplifying attention overhead at longer sequences. DeepSeek generates ~23%
 faster than Devstral at tg128 (70 vs 57 t/s) because its 14.77B active parameters move less
-weight per token than Devstral's 23.57B, despite the heavier Q6\_K quantisation.
+weight per token than Devstral's 23.57B, despite the heavier Q6\_K quantization.
 
 
 ### 14.7 llama-bench Results: RTX 4090, Devstral-Small-2-24B-Instruct-2512-Q4\_K\_M
@@ -2519,7 +2731,7 @@ llama-bench \
 
 > **Note on model label:** llama-bench reports this model as "mistral3 14B Q4\_K - Medium".
 > The `mistral3` identifier reflects the architecture as registered in the GGUF metadata;
-> the `14B` label reflects the quantised layer count visible to llama.cpp, not the full
+> the `14B` label reflects the quantized layer count visible to llama.cpp, not the full
 > 23.57B parameter count. This is the correct GGUF for Devstral-Small-2-24B-Instruct-2512.
 
 **Observations:**
@@ -2534,9 +2746,70 @@ represents ~78% memory bandwidth efficiency. Prefill declines 22% from pp2048 to
 almost identical to gpt-oss-20b's 21%, consistent with both using standard full-attention
 at comparable layer counts.
 
-## 15\. GPU Upgrade Analysis
+## 15\. Diagnostic Tooling
 
-### 15.1 Candidate Cards
+Two purpose-built Python scripts support analysis and configuration of the inference stack. Both
+are maintained alongside the design document in the project repository.
+
+### 15.1 llama_server_vram_report.py
+
+Parses a llama-server startup log and produces a structured VRAM metrics report covering five
+sections: model metadata (name, architecture, file type, quantization, context length, KV
+quantization), model architecture (layer count, full-attention vs SWA split, SWA window size,
+embedding dimension, attention heads, MoE expert counts), VRAM allocation (total, free at
+startup, per-component breakdown, total used, free after load), KV cache detail (slot count,
+`kv_unified` flag, context per slot with capping warning, cell counts, per-slot costs), and slot
+capacity analysis (usable headroom, additional slots possible).
+
+Usage:
+
+```bash
+python3 llama_server_vram_report.py /tmp/llama-server/log/llama-server_*.txt
+```
+
+Requires no dependencies beyond the Python standard library.
+
+Key findings enabled by this tool during development: the OOM boundary for gpt-oss-20b MXFP4
+lies between `--ctx-size 524,288` and `655,360` at `--parallel 16 --kv-unified`; the compute
+buffer (not the KV cache) is the binding constraint when scaling `--ctx-size`; and slot count is
+essentially free in unified mode from a VRAM perspective (§10.5).
+
+### 15.2 gguf_model_info.py
+
+Reads architecture metadata directly from a GGUF model file and pretty-prints it in Unicode
+box-drawing tables using `prettytable`. Does not require a running server. Covers: general
+metadata (name, architecture, size label, file type, license), context and dimensions (max
+context length, layer count, embedding dimension, feed-forward length, vocabulary size),
+attention (Q and KV heads, GQA ratio, head dimensions, SWA window and pattern, RMS norm
+epsilon), mixture of experts (total and active expert counts, utilization percentage, expert
+groups, feed-forward length), RoPE positional encoding (frequency base, scaling type and factor,
+original context, extension multiplier), tokenizer (model, pre, BOS/EOS/PAD IDs), and tensors
+(total count, total parameter count, per-quantization-type breakdown with parameter counts and
+percentages).
+
+Usage:
+
+```bash
+python3 gguf_model_info.py ~/gguf/openai_gpt-oss-20b-MXFP4.gguf
+```
+
+Requires: `pip install gguf prettytable`
+
+The tensor breakdown for gpt-oss-20b MXFP4 is instructive: despite the file being named "MXFP4",
+only 72 of 459 tensors are MXFP4 — the expert weight matrices, which account for 91.4% of total
+parameters. The remaining 98 Q8_0 tensors (attention weights, 8.6% of parameters) and 289 F32
+tensors (norm weights and embeddings, 0.04% of parameters) reflect the mixed-precision approach
+used for training.
+
+### 15.3 References
+
+- `llama_server_vram_report.py` — project repository
+- `gguf_model_info.py` — project repository
+
+
+## 16\. GPU Upgrade Analysis
+
+### 16.1 Candidate Cards
 
 | Card | VRAM | Bandwidth | Price (Newegg) | ECC |
 | --- | --- | --- | --- | --- |
@@ -2550,13 +2823,13 @@ Context window capacity is model-dependent and covered in §10. The primary cons
 current RTX 4090 is VRAM for dense models (Devstral, DeepSeek) rather than for gpt-oss-20b,
 which fits its full 131K context comfortably on 24GB.
 
-### 15.2 Analysis
+### 16.2 Analysis
 
 *   **RTX 6000 Ada and RTX A6000:** Bandwidth equal to or below the current RTX 4090. Generation speed does not improve despite higher prices. The VRAM gain is only meaningful for larger models or Q8 quality at long context. Poor value for this use case.
-*   **RTX 5090:** Genuine 1.78× bandwidth improvement (1,792 GB/s). Generation speed scales proportionally for bandwidth-bound workloads. 32GB enables larger models and higher quantisation at long context. Best value upgrade path.
+*   **RTX 5090:** Genuine 1.78× bandwidth improvement (1,792 GB/s). Generation speed scales proportionally for bandwidth-bound workloads. 32GB enables larger models and higher quantization at long context. Best value upgrade path.
 *   **RTX PRO 6000 Blackwell:** Matches the 5090's bandwidth while providing 96GB GDDR7 ECC. Enables Q8 quality at full context for all current models, and opens access to larger models such as gpt-oss-120b. ECC memory eliminates the risk of silent bit errors during multi-hour Superpowers sessions.
 
-### 15.3 Recommendation
+### 16.3 Recommendation
 
 For the stated priorities — quality-first, long context, extended autonomous sessions:
 
@@ -2565,13 +2838,13 @@ For the stated priorities — quality-first, long context, extended autonomous s
 
 Staying on the RTX 4090 is a fully viable working configuration for most development tasks with the current model stack. An upgrade makes the most material difference for: Q8 quality preference, sustained multi-hour autonomous Superpowers sessions, and access to larger models.
 
-## 16\. Why Multi-GPU Is Not Recommended
+## 17\. Why Multi-GPU Is Not Recommended
 
 Adding a second consumer GPU does not provide a viable path to better inference performance for this use case.
 
-### 16.1 The PCIe Bottleneck
+### 17.1 The PCIe Bottleneck
 
-Multi-GPU inference requires tensor parallelism: weight matrices are split across both cards, and each forward pass requires synchronisation across the PCIe bus at every layer boundary — hundreds of times per token generated.
+Multi-GPU inference requires tensor parallelism: weight matrices are split across both cards, and each forward pass requires synchronization across the PCIe bus at every layer boundary — hundreds of times per token generated.
 
 | Interconnect | Bandwidth | Notes |
 | --- | --- | --- |
@@ -2582,15 +2855,15 @@ Multi-GPU inference requires tensor parallelism: weight matrices are split acros
 
 PCIe is 31× slower than VRAM bandwidth. Without NVLink — which consumer cards do not support — each added card introduces a per-token latency tax. Generation speed with dual 4090s typically equals or regresses compared to a single card.
 
-### 16.2 Practical Outcomes
+### 17.2 Practical Outcomes
 
 *   **Dual RTX 4090:** Devstral Q4 already fits on one card. A second card adds context capacity but generation speed likely regresses due to PCIe overhead.
 *   **Four-way RTX 3090:** PCIe overhead compounds with each additional GPU. Near-linear degradation per card added.
 *   **RTX PRO 6000 Blackwell:** Solves VRAM capacity, bandwidth, and ECC simultaneously on a single die. No inter-card communication overhead. The architectural advantage that justifies its price premium over any multi-GPU consumer setup.
 
-## 17\. Future Work: Superpowers Context Consumption Study
+## 18\. Future Work: Superpowers Context Consumption Study
 
-The empirical VRAM study (companion document) characterised the hardware ceiling with precision. The natural follow-on is to characterise how a real Superpowers session consumes that budget over time.
+The empirical VRAM study (companion document) characterized the hardware ceiling with precision. The natural follow-on is to characterize how a real Superpowers session consumes that budget over time.
 
 The fresh-subagent architecture is designed to prevent unbounded context accumulation, but the actual consumption pattern across a multi-hour session has not been measured. Specific questions to address:
 
@@ -2601,7 +2874,7 @@ The fresh-subagent architecture is designed to prevent unbounded context accumul
 
 The goal is to replace the current estimated 3–6K token skill overhead figure with empirically grounded measurements, giving the design document the same level of precision for Superpowers sessions that the VRAM study provides for hardware limits. Results should be documented in the same format as the VRAM study for direct comparability.
 
-## 18\. Design Principle: Code Should Fit a Context Window
+## 19\. Design Principle: Code Should Fit a Context Window
 
 The context window makes concrete a principle with deep roots in software engineering:
 
@@ -2609,7 +2882,7 @@ The context window makes concrete a principle with deep roots in software engine
 
 This is not a workaround for an AI limitation — it is a restatement of principles good engineers have articulated for decades, now made viscerally concrete by the context window.
 
-### 18.1 Established Antecedents
+### 19.1 Established Antecedents
 
 *   **Dijkstra:** Programs should be understandable by a reader holding only bounded context in mind (human working memory: 7±2 chunks). The context window is a more precise, measurable version of this constraint.
 *   **Single Responsibility Principle:** One thing per module means a small mental model. Context-window-sized modules are SRP-compliant by construction.
@@ -2617,16 +2890,16 @@ This is not a workaround for an AI limitation — it is a restatement of princip
 *   **Unix philosophy:** Small programs that do one thing well and compose cleanly. Each program fits in one person's head — and one context window.
 *   **Screaming architecture:** The top-level structure should immediately convey what the system does, enabling navigation without reading everything.
 
-### 18.2 Practical Corollaries
+### 19.2 Practical Corollaries
 
-*   **Shallow dependency graphs:** Deep coupling fills context with dependencies before any logic is read. Minimise transitive loading requirements.
+*   **Shallow dependency graphs:** Deep coupling fills context with dependencies before any logic is read. Minimize transitive loading requirements.
 *   **Interfaces as compression:** A well-designed interface summarises a component. Load the interface to reason about usage; load the implementation only when needed.
 *   **Explicit over implicit:** Global state and action-at-a-distance force loading more context to understand any one piece. Explicit data flow keeps units self-contained.
-*   **Tests as specifications:** A complete test suite compresses module behaviour without requiring the implementation. Tests are context-efficient proxies for full modules.
+*   **Tests as specifications:** A complete test suite compresses module behavior without requiring the implementation. Tests are context-efficient proxies for full modules.
 
 What the context window surfaces is that comprehensibility and correctness are related. Code that cannot be held in bounded context cannot be reliably reasoned about — by a human, by an AI, or by the original author returning to it months later. Bugs live in the gaps between what a reader can hold simultaneously. The context window did not create this constraint; it made it impossible to ignore.
 
-## 19\. Summary
+## 20\. Summary
 
 The complete recommended configuration for a quality-first, privacy-preserving, single-user AI coding agent on a Debian 12 workstation with an RTX 4090:
 
@@ -2635,6 +2908,10 @@ The complete recommended configuration for a quality-first, privacy-preserving, 
 | Primary model | openai\_gpt-oss-20b MXFP4 | ~3× faster generation; full 131K context fits easily; chain-of-thought reasoning; no OpenCode compatibility issues |
 | Alternate model | Devstral-Small-2-24B Q4\_K\_M | Purpose-trained for agentic coding (68% SWE-Bench); worth retaining for comparison |
 | Inference server | llama.cpp llama-server | Required for `--jinja` (tool calls); OpenAI-compatible API; full CUDA acceleration |
+| llama-server slots | `--parallel 4 --kv-unified` | 4 concurrent full-context sessions; unified KV pool; slot count free in unified mode |
+| llama-server context | `--ctx-size 524288` | 4× CTX\_LEN shared pool; per-slot context capped at model training context (131,072) |
+| KV cache quantization | `--cache-type-k/v q8_0` | Halves KV allocation vs F16; 408 MiB/slot at 131K context |
+| Slot save path | `--slot-save-path /tmp/llama-server/slots` | Enables KV cache flush API used by regression harness |
 | Agent frontend | OpenCode | Provider-agnostic; LSP; native Superpowers integration; MIT license |
 | Workflow framework | Superpowers | TDD enforcement; subagent orchestration; automatic skill activation |
 | Language servers | Per-language (rust-analyzer, pyright, docker-language-server, etc.) | Semantic code intelligence; CPU only; no GPU impact |
@@ -2642,6 +2919,7 @@ The complete recommended configuration for a quality-first, privacy-preserving, 
 | Notes MCP | trilium-bolt | Automatic HTML-to-markdown; note retrieval, creation, search; on-demand; no daemon |
 | Docker MCP | docker-mcp (quickstart) or Docker MCP Toolkit (full catalog) | Container and Compose management; CPU only; no GPU impact |
 | AWS MCP | awslabs/mcp (stdio, open-source) | Local credentials; CloudTrail audit logging; 15,000+ APIs |
+| Diagnostic tooling | llama\_server\_vram\_report.py, gguf\_model\_info.py | Log-based VRAM analysis; GGUF metadata inspection; no runtime dependency |
 | GPU upgrade (recommended) | RTX PRO 6000 Blackwell | 96GB ECC; 1,792 GB/s; both models at full context and Q8 quality; single die |
 | GPU upgrade (value) | RTX 5090 | 1.78× bandwidth; 32GB; headroom for larger models |
 
@@ -2656,7 +2934,7 @@ whereas Devstral requires a patched chat template as a workaround for an open Op
 
 Devstral remains available in the OpenCode config and is worth retaining. It was purpose-trained
 on agentic software engineering workflows and its 68% SWE-Bench Verified score reflects genuine
-coding specialisation. Whether that specialisation translates to meaningfully better outcomes than
+coding specialization. Whether that specialization translates to meaningfully better outcomes than
 gpt-oss-20b's general reasoning capability in practice requires longer-term comparison across
 real tasks.
 

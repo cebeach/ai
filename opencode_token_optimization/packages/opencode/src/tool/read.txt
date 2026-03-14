@@ -1,0 +1,1 @@
+Read a file or directory. Returns numbered lines for files and entries for directories. Use absolute paths. Use offset to continue reading later sections. Images and PDFs are returned as attachments.

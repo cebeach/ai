@@ -1,0 +1,1 @@
+Search file contents by regex. Returns matching file paths and line numbers. Use include to limit files by glob pattern.

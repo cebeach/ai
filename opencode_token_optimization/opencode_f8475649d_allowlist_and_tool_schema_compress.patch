@@ -1,0 +1,226 @@
+diff --git a/packages/opencode/src/agent/agent.ts b/packages/opencode/src/agent/agent.ts
+index b247bb7fa..f10f8a097 100644
+--- a/packages/opencode/src/agent/agent.ts
++++ b/packages/opencode/src/agent/agent.ts
+@@ -40,6 +40,7 @@ export namespace Agent {
+         })
+         .optional(),
+       variant: z.string().optional(),
++      tools: z.record(z.string(), z.boolean()).optional(),
+       prompt: z.string().optional(),
+       options: z.record(z.string(), z.any()),
+       steps: z.number().int().positive().optional(),
+@@ -222,6 +223,7 @@ export namespace Agent {
+       item.prompt = value.prompt ?? item.prompt
+       item.description = value.description ?? item.description
+       item.temperature = value.temperature ?? item.temperature
++      item.tools = value.tools ?? item.tools
+       item.topP = value.top_p ?? item.topP
+       item.mode = value.mode ?? item.mode
+       item.color = value.color ?? item.color
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 55b95fffe..ce1797dcc 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -752,6 +752,14 @@ export namespace SessionPrompt {
+     using _ = log.time("resolveTools")
+     const tools: Record<string, AITool> = {}
+ 
++    const configuredTools = input.agent.tools
++    const hasStrictAllowlist = !!configuredTools && Object.keys(configuredTools).length > 0
++
++    function isAllowedTool(toolID: string) {
++      if (!hasStrictAllowlist) return true
++      return configuredTools?.[toolID] === true
++    }
++
+     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
+       sessionID: input.session.id,
+       abort: options.abortSignal!,
+@@ -791,6 +799,8 @@ export namespace SessionPrompt {
+       { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
+       input.agent,
+     )) {
++      if (!isAllowedTool(item.id)) continue
++
+       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+       tools[item.id] = tool({
+         id: item.id as any,
+@@ -835,6 +845,8 @@ export namespace SessionPrompt {
+     }
+ 
+     for (const [key, item] of Object.entries(await MCP.tools())) {
++      if (!isAllowedTool(key)) continue
++
+       const execute = item.execute
+       if (!execute) continue
+ 
+diff --git a/packages/opencode/src/tool/edit.ts b/packages/opencode/src/tool/edit.ts
+index c7b12378e..36863171c 100644
+--- a/packages/opencode/src/tool/edit.ts
++++ b/packages/opencode/src/tool/edit.ts
+@@ -36,10 +36,10 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
+ export const EditTool = Tool.define("edit", {
+   description: DESCRIPTION,
+   parameters: z.object({
+-    filePath: z.string().describe("The absolute path to the file to modify"),
+-    oldString: z.string().describe("The text to replace"),
+-    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+-    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
++    filePath: z.string().describe("Path."),
++    oldString: z.string().describe("Match text."),
++    newString: z.string().describe("New text."),
++    replaceAll: z.boolean().optional().describe("Replace all."),
+   }),
+   async execute(params, ctx) {
+     if (!params.filePath) {
+diff --git a/packages/opencode/src/tool/edit.txt b/packages/opencode/src/tool/edit.txt
+index 618fd5ad1..912942183 100644
+--- a/packages/opencode/src/tool/edit.txt
++++ b/packages/opencode/src/tool/edit.txt
+@@ -1,10 +1 @@
+-Performs exact string replacements in files. 
+-
+-Usage:
+-- You must use your `Read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file. 
+-- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + colon + space (e.g., `1: `). Everything after that space is the actual file content to match. Never include any part of the line number prefix in the oldString or newString.
+-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
+-- The edit will FAIL if `oldString` is not found in the file with an error "oldString not found in content".
+-- The edit will FAIL if `oldString` is found multiple times in the file with an error "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match." Either provide a larger string with more surrounding context to make it unique or use `replaceAll` to change every instance of `oldString`. 
+-- Use `replaceAll` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
++Replace exact text in a file.
+\ No newline at end of file
+diff --git a/packages/opencode/src/tool/glob.ts b/packages/opencode/src/tool/glob.ts
+index a2611246c..1becee3c3 100644
+--- a/packages/opencode/src/tool/glob.ts
++++ b/packages/opencode/src/tool/glob.ts
+@@ -10,13 +10,11 @@ import { assertExternalDirectory } from "./external-directory"
+ export const GlobTool = Tool.define("glob", {
+   description: DESCRIPTION,
+   parameters: z.object({
+-    pattern: z.string().describe("The glob pattern to match files against"),
++    pattern: z.string().describe("Glob pattern."),
+     path: z
+       .string()
+       .optional()
+-      .describe(
+-        `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
+-      ),
++      .describe("Search dir."),
+   }),
+   async execute(params, ctx) {
+     await ctx.ask({
+diff --git a/packages/opencode/src/tool/glob.txt b/packages/opencode/src/tool/glob.txt
+index 627da6cae..788a69fa4 100644
+--- a/packages/opencode/src/tool/glob.txt
++++ b/packages/opencode/src/tool/glob.txt
+@@ -1,6 +1 @@
+-- Fast file pattern matching tool that works with any codebase size
+-- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+-- Returns matching file paths sorted by modification time
+-- Use this tool when you need to find files by name patterns
+-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.
++Find files by glob pattern.
+\ No newline at end of file
+diff --git a/packages/opencode/src/tool/grep.ts b/packages/opencode/src/tool/grep.ts
+index 82e7ac166..53dd9bbca 100644
+--- a/packages/opencode/src/tool/grep.ts
++++ b/packages/opencode/src/tool/grep.ts
+@@ -15,9 +15,9 @@ const MAX_LINE_LENGTH = 2000
+ export const GrepTool = Tool.define("grep", {
+   description: DESCRIPTION,
+   parameters: z.object({
+-    pattern: z.string().describe("The regex pattern to search for in file contents"),
+-    path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
+-    include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
++    pattern: z.string().describe("Regex."),
++    path: z.string().optional().describe("Search dir."),
++    include: z.string().optional().describe("File glob."),
+   }),
+   async execute(params, ctx) {
+     if (!params.pattern) {
+diff --git a/packages/opencode/src/tool/grep.txt b/packages/opencode/src/tool/grep.txt
+index adf583695..6821c4e0b 100644
+--- a/packages/opencode/src/tool/grep.txt
++++ b/packages/opencode/src/tool/grep.txt
+@@ -1,8 +1 @@
+-- Fast content search tool that works with any codebase size
+-- Searches file contents using regular expressions
+-- Supports full regex syntax (eg. "log.*Error", "function\s+\w+", etc.)
+-- Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
+-- Returns file paths and line numbers with at least one match sorted by modification time
+-- Use this tool when you need to find files containing specific patterns
+-- If you need to identify/count the number of matches within files, use the Bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.
+-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
++Search file contents by regex.
+\ No newline at end of file
+diff --git a/packages/opencode/src/tool/read.ts b/packages/opencode/src/tool/read.ts
+index c981ac16e..949897538 100644
+--- a/packages/opencode/src/tool/read.ts
++++ b/packages/opencode/src/tool/read.ts
+@@ -21,9 +21,9 @@ const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+ export const ReadTool = Tool.define("read", {
+   description: DESCRIPTION,
+   parameters: z.object({
+-    filePath: z.string().describe("The absolute path to the file or directory to read"),
+-    offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
+-    limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
++    filePath: z.string().describe("Path."),
++    offset: z.coerce.number().describe("Start line.").optional(),
++    limit: z.coerce.number().describe("Max lines.").optional(),
+   }),
+   async execute(params, ctx) {
+     if (params.offset !== undefined && params.offset < 1) {
+diff --git a/packages/opencode/src/tool/read.txt b/packages/opencode/src/tool/read.txt
+index 368174cc8..4c3f4b811 100644
+--- a/packages/opencode/src/tool/read.txt
++++ b/packages/opencode/src/tool/read.txt
+@@ -1,14 +1 @@
+-Read a file or directory from the local filesystem. If the path does not exist, an error is returned.
+-
+-Usage:
+-- The filePath parameter should be an absolute path.
+-- By default, this tool returns up to 2000 lines from the start of the file.
+-- The offset parameter is the line number to start from (1-indexed).
+-- To read later sections, call this tool again with a larger offset.
+-- Use the grep tool to find specific content in large files or files with long lines.
+-- If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern.
+-- Contents are returned with each line prefixed by its line number as `<line>: <content>`. For example, if a file has contents "foo\n", you will receive "1: foo\n". For directories, entries are returned one per line (without line numbers) with a trailing `/` for subdirectories.
+-- Any line longer than 2000 characters is truncated.
+-- Call this tool in parallel when you know there are multiple files you want to read.
+-- Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
+-- This tool can read image files and PDFs and return them as file attachments.
++Read a file or directory.
+\ No newline at end of file
+diff --git a/packages/opencode/src/tool/write.ts b/packages/opencode/src/tool/write.ts
+index 8c1e53cca..19422e557 100644
+--- a/packages/opencode/src/tool/write.ts
++++ b/packages/opencode/src/tool/write.ts
+@@ -19,8 +19,8 @@ const MAX_PROJECT_DIAGNOSTICS_FILES = 5
+ export const WriteTool = Tool.define("write", {
+   description: DESCRIPTION,
+   parameters: z.object({
+-    content: z.string().describe("The content to write to the file"),
+-    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
++    content: z.string().describe("Text."),
++    filePath: z.string().describe("Path."),
+   }),
+   async execute(params, ctx) {
+     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+diff --git a/packages/opencode/src/tool/write.txt b/packages/opencode/src/tool/write.txt
+index 063cbb1f0..b4c80b41e 100644
+--- a/packages/opencode/src/tool/write.txt
++++ b/packages/opencode/src/tool/write.txt
+@@ -1,8 +1 @@
+-Writes a file to the local filesystem.
+-
+-Usage:
+-- This tool will overwrite the existing file if there is one at the provided path.
+-- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
+-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+-- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
++Write a file.
+\ No newline at end of file

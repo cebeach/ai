@@ -1,0 +1,173 @@
+--- a/packages/opencode/src/project/instance.ts
++++ b/packages/opencode/src/project/instance.ts
+@@ -9,7 +9,17 @@
+ import { InstanceState } from "@/util/instance-state"
+ 
+ interface Context {
++  /**
++   * Legacy field retained for compatibility.
++   *
++   * Historically, much of the code reads `Instance.directory`.
++   * We keep it for now so this refactor stays mechanically small.
++   */
+   directory: string
++
++  /** Immutable directory where OpenCode started for this instance. */
++  startupDirectory: string
++
+   worktree: string
+   project: Project.Info
+ }
+@@ -32,20 +42,33 @@
+   })
+ }
+ 
+-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
++function boot(input: {
++  directory: string
++  startupDirectory: string
++  init?: () => Promise<any>
++  project?: Project.Info
++  worktree?: string
++}) {
+   return iife(async () => {
+     const ctx =
+       input.project && input.worktree
+         ? {
++            // Legacy alias preserved for compatibility with existing callers.
+             directory: input.directory,
++            // This is the true immutable startup directory captured at init time.
++            startupDirectory: input.startupDirectory,
+             worktree: input.worktree,
+             project: input.project,
+           }
+         : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
++            // Legacy alias preserved for compatibility with existing callers.
+             directory: input.directory,
++            // This is the true immutable startup directory captured at init time.
++            startupDirectory: input.startupDirectory,
+             worktree: sandbox,
+             project,
+           }))
++    // Provide the initialized instance context to downstream code.
+     await context.provide(ctx, async () => {
+       await input.init?.()
+     })
+@@ -63,20 +86,34 @@
+ }
+ 
+ export const Instance = {
+-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
++  async provide<R>(input: {
++    directory: string
++    startupDirectory?: string
++    init?: () => Promise<any>
++    fn: () => R
++  }): Promise<R> {
++    // Normalize the directory once so all later comparisons use canonical paths.
+     const directory = Filesystem.resolve(input.directory)
++
++    // Freeze the startup directory exactly once at initialization time.
++    // If not provided explicitly yet, fall back to `directory` so behavior remains compatible.
++    const startupDirectory = Filesystem.resolve(input.startupDirectory ?? directory)
++
+     let existing = cache.get(directory)
+     if (!existing) {
+-      Log.Default.info("creating instance", { directory })
++      Log.Default.info("creating instance", { directory, startupDirectory })
+       existing = track(
+         directory,
+         boot({
+           directory,
++          startupDirectory,
+           init: input.init,
+         }),
+       )
+     }
+     const ctx = await existing
++
++    // Execute the caller's function inside the initialized instance context.
+     return context.provide(ctx, async () => {
+       return input.fn()
+     })
+@@ -84,6 +121,11 @@
+   get directory() {
+     return context.use().directory
+   },
++  get startupDirectory() {
++    // Unambiguous immutable startup directory.
++    // Future permission and workspace-boundary logic should prefer this field.
++    return context.use().startupDirectory
++  },
+   get worktree() {
+     return context.use().worktree
+   },
+@@ -91,13 +133,16 @@
+     return context.use().project
+   },
+   /**
+-   * Check if a path is within the project boundary.
+-   * Returns true if path is inside Instance.directory OR Instance.worktree.
+-   * Paths within the worktree but outside the working directory should not trigger external_directory permission.
++   * Check if a path is within the project boundary used by permissions.
++   *
++   * The documented rule is based on the directory where OpenCode was started,
++   * so the first containment check should be against the immutable startup directory.
+    */
+   containsPath(filepath: string) {
+-    if (Filesystem.contains(Instance.directory, filepath)) return true
+-    // Non-git projects set worktree to "/" which would match ANY absolute path.
++    // Key semantic fix: compare against immutable startupDirectory,
++    // not the ambiguously named legacy `directory` field.
++    if (Filesystem.contains(Instance.startupDirectory, filepath)) return true
++    // Non-git projects set worktree to "/" which would match any absolute path.
+     // Skip worktree check in this case to preserve external_directory permissions.
+     if (Instance.worktree === "/") return false
+     return Filesystem.contains(Instance.worktree, filepath)
+@@ -105,12 +150,26 @@
+   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
+     return State.create(() => Instance.directory, init, dispose)
+   },
+-  async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
++  async reload(input: {
++    directory: string
++    startupDirectory?: string
++    init?: () => Promise<any>
++    project?: Project.Info
++    worktree?: string
++  }) {
+     const directory = Filesystem.resolve(input.directory)
+-    Log.Default.info("reloading instance", { directory })
++    const startupDirectory = Filesystem.resolve(input.startupDirectory ?? directory)
++    Log.Default.info("reloading instance", { directory, startupDirectory })
+     await Promise.all([State.dispose(directory), Effect.runPromise(InstanceState.dispose(directory))])
+     cache.delete(directory)
+-    const next = track(directory, boot({ ...input, directory }))
++    const next = track(
++      directory,
++      boot({
++        ...input,
++        directory,
++        startupDirectory,
++      }),
++    )
+     emit(directory)
+     return await next
+   },
+--- a/packages/opencode/src/cli/cmd/tui/thread.ts
++++ b/packages/opencode/src/cli/cmd/tui/thread.ts
+@@ -170,6 +170,14 @@
+       const prompt = await input(args.prompt)
+       const config = await Instance.provide({
+         directory: cwd,
++        // At this point `cwd` is the confirmed canonical startup directory:
++        // - args.project (the optional positional project path) has already been resolved
++        // - process.chdir(next) has already succeeded
++        // - process.cwd() now reflects the real session start location
++        //
++        // We store it explicitly under an immutable name so future readers can
++        // distinguish "startup directory" from mutable process working-directory state.
++        startupDirectory: cwd,
+         fn: () => TuiConfig.get(),
+       })
+ 
