@@ -84,7 +84,7 @@ def run_opencode_tui(
     prompt: str,
     workspace: Path,
     timeout: int = 120,
-    quiet_timeout: int = 2,
+    quiet_timeout: int = 5,
     ready_timeout: int = 20,
     exit_timeout: int = 10,
     max_permission_approvals: int = 5,
@@ -291,6 +291,29 @@ def assert_not_contains_any(haystack: str, needles: list[str], label: str) -> No
         assert needle not in haystack, f"{label} unexpectedly contained: {needle!r}"
 
 
+def assert_matches_all(haystack: str, patterns: list[str], label: str) -> None:
+    """Assert that every regex pattern matches somewhere in haystack.
+
+    Use stdout_contains_re / stderr_contains_re in YAML case definitions when
+    the expected text may be split across lines by TUI terminal wrapping.  For
+    example, a path like src/nested/sample.py rendered in a table may wrap to:
+
+        src/nested/
+        sample.py
+
+    A literal stdout_contains needle would fail; a regex such as
+    r'src[\\s/]*nested[\\s/]*sample\\.py' matches regardless of wrapping.
+    """
+    for pattern in patterns:
+        assert re.search(pattern, haystack), f"{label} missing expected pattern: {pattern!r}"
+
+
+def assert_not_matches_any(haystack: str, patterns: list[str], label: str) -> None:
+    """Assert that no regex pattern matches anywhere in haystack."""
+    for pattern in patterns:
+        assert not re.search(pattern, haystack), f"{label} unexpectedly matched pattern: {pattern!r}"
+
+
 def assert_file_contains(workspace: Path, entries: list[dict]) -> None:
     for entry in entries:
         path = workspace / entry["path"]
@@ -349,8 +372,12 @@ def test_opencode_case(case_path: Path, tmp_path: Path, artifacts_root: Path, op
 
     assert_contains_all(result["stdout"], expect.get("stdout_contains", []), "stdout")
     assert_not_contains_any(result["stdout"], expect.get("stdout_not_contains", []), "stdout")
+    assert_matches_all(result["stdout"], expect.get("stdout_contains_re", []), "stdout")
+    assert_not_matches_any(result["stdout"], expect.get("stdout_not_contains_re", []), "stdout")
     assert_contains_all(result["stderr"], expect.get("stderr_contains", []), "stderr")
     assert_not_contains_any(result["stderr"], expect.get("stderr_not_contains", []), "stderr")
+    assert_matches_all(result["stderr"], expect.get("stderr_contains_re", []), "stderr")
+    assert_not_matches_any(result["stderr"], expect.get("stderr_not_contains_re", []), "stderr")
     assert_file_contains(workspace, expect.get("file_contains", []))
     assert_file_not_contains(workspace, expect.get("file_not_contains", []))
     assert_files_exist(workspace, expect.get("files_exist", []))
