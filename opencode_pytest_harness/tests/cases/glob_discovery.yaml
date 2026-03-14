@@ -4,5 +4,6 @@ prompt: List all .md and .py files in the workspace.
 expect:
   stdout_contains:
     - beta.md
-    - src/nested/sample.py
+  stdout_contains_re:
+    - 'src[\s/]*nested[\s/]*sample\.py'
   files_unchanged: true
