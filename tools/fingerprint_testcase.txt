@@ -1,4 +1,16 @@
-Hello World!
-| Fingerprint | abcdefg |
-More text
+# Fingerprint testcase
+
+| Field | Value |
+|-------|-------|
+| DocumentName | fingerprint_testcase |
+| Category | test_data |
+| Revision | r1 |
+| Fingerprint | c269fd7a48f1a5a180328f944267007e26b483e3f6887eb99a0ec872a7cc78a0 |
+| Status | active |
+| Timestamp | 2026-03-15T21:19:07 |
+| Authors | Chad Beach & ChatGPT-5 |
+
+## Purpose
+
+This is a sample file for testing functionality of project_document_fingerprint.py
 

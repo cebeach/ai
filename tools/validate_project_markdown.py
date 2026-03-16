@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -18,13 +17,12 @@ FIELD_ORDER = [
     "Status",
     "Timestamp",
     "Authors",
-    "HeaderEnd",
 ]
 STATUS_VALUES = {"draft", "active", "stable", "superseded"}
 DOCUMENT_NAME_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*$")
 REVISION_RE = re.compile(r"^r([1-9][0-9]*)$")
 FILENAME_RE = re.compile(r"^([a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*)_(r[1-9][0-9]*)\.md$")
-TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:-07:00|-08:00)$")
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_]*>")
 AVOID_SPELLINGS = {
@@ -36,6 +34,7 @@ AVOID_SPELLINGS = {
 INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1")
 HORIZONTAL_RULE_RE = re.compile(r"^\s{0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})\s*$")
 HEADER_ROW_RE = re.compile(r"^\| (?P<field>[A-Za-z][A-Za-z0-9]*) \| (?P<value>.*) \|$")
+FINGERPRINT_ROW_RE = re.compile(rb"^\| Fingerprint \| .*? \|(?:\r\n|\n)", re.MULTILINE)
 
 
 @dataclass
@@ -53,22 +52,14 @@ class ValidationResult:
 class ParsedDocument:
     path: Path
     raw_bytes: bytes
-    newline: bytes
     lines: list[str]
     header_values: dict[str, str]
     header_end_line_index: int
+    body_start_line_index: int
 
 
 class ValidationError(Exception):
     pass
-
-
-def detect_newline(raw_bytes: bytes) -> bytes:
-    crlf_count = raw_bytes.count(b"\r\n")
-    lf_count = raw_bytes.count(b"\n") - crlf_count
-    if crlf_count and lf_count:
-        raise ValidationError("mixed line endings are not supported")
-    return b"\r\n" if crlf_count else b"\n"
 
 
 def read_utf8_without_bom(path: Path) -> tuple[bytes, str]:
@@ -82,12 +73,13 @@ def read_utf8_without_bom(path: Path) -> tuple[bytes, str]:
     return raw_bytes, text
 
 
+
 def parse_document(path: Path) -> ParsedDocument:
     raw_bytes, text = read_utf8_without_bom(path)
-    newline = detect_newline(raw_bytes)
     lines = text.splitlines()
 
-    if len(lines) < 12:
+    minimum_lines = 4 + len(FIELD_ORDER) + 1
+    if len(lines) < minimum_lines:
         raise ValidationError("document is too short to contain the canonical header")
 
     if not lines[0].startswith("# "):
@@ -114,17 +106,22 @@ def parse_document(path: Path) -> ParsedDocument:
             )
         header_values[field] = value
 
-    if lines[12] != "":
-        raise ValidationError("line 13 must be blank")
+    blank_line_index = 4 + len(FIELD_ORDER)
+    if lines[blank_line_index] != "":
+        raise ValidationError(f"line {blank_line_index + 1} must be blank")
+
+    header_end_line_index = blank_line_index - 1
+    body_start_line_index = blank_line_index + 1
 
     return ParsedDocument(
         path=path,
         raw_bytes=raw_bytes,
-        newline=newline,
         lines=lines,
         header_values=header_values,
-        header_end_line_index=11,
+        header_end_line_index=header_end_line_index,
+        body_start_line_index=body_start_line_index,
     )
+
 
 
 def validate_filename(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -152,7 +149,6 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
     category = doc.header_values["Category"]
     status = doc.header_values["Status"]
     timestamp = doc.header_values["Timestamp"]
-    header_end = doc.header_values["HeaderEnd"]
 
     if not DOCUMENT_NAME_RE.fullmatch(document_name):
         result.errors.append("DocumentName is invalid under the canonical grammar")
@@ -165,16 +161,12 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
     if status not in STATUS_VALUES:
         result.errors.append("Status must be one of: draft, active, stable, superseded")
     if not TIMESTAMP_RE.fullmatch(timestamp):
-        result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS-07:00 or -08:00")
-    if header_end != "true":
-        result.errors.append("HeaderEnd must be 'true'")
+        result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS")
 
 
 
 def compute_expected_fingerprint(doc: ParsedDocument) -> str:
-    newline = doc.newline
-    pattern = re.compile(rb"^\| Fingerprint \| .*? \|" + re.escape(newline), re.MULTILINE)
-    match = pattern.search(doc.raw_bytes)
+    match = FINGERPRINT_ROW_RE.search(doc.raw_bytes)
     if not match:
         raise ValidationError("could not locate the Fingerprint header row in the raw bytes")
     fingerprint_input = doc.raw_bytes[: match.start()] + doc.raw_bytes[match.end() :]
@@ -253,7 +245,7 @@ def validate_formatting(doc: ParsedDocument, result: ValidationResult) -> None:
             if idx != 4:
                 result.errors.append(f"line {idx}: horizontal rules are prohibited")
 
-        if idx > 13 and line.startswith("#"):
+        if idx >= doc.body_start_line_index + 1 and line.startswith("#"):
             previous = doc.lines[idx - 2]
             if previous != "":
                 result.errors.append(f"line {idx}: section headings must be separated by a blank line")
@@ -380,7 +372,7 @@ def print_result(result: ValidationResult) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate governed Markdown documents against project_document_spec_r8.md"
+        description="Validate governed Markdown documents against project_document_spec_r16.md"
     )
     parser.add_argument(
         "paths",
