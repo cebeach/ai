@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import re
 import sys
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -163,6 +164,22 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
     if not TIMESTAMP_RE.fullmatch(timestamp):
         result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS")
 
+
+def validate_timestamp_plausibility(doc: ParsedDocument, result: ValidationResult) -> None:
+    timestamp = doc.header_values["Timestamp"]
+    if not TIMESTAMP_RE.fullmatch(timestamp):
+        return
+    try:
+        timestamp_value = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S")
+    except ValueError as exc:
+        result.errors.append(f"Timestamp is not a valid calendar time: {exc}")
+        return
+
+    validation_time = datetime.now().replace(microsecond=0)
+    if timestamp_value > validation_time:
+        result.errors.append(
+            "Timestamp cannot be in the future relative to validation time"
+        )
 
 
 def compute_expected_fingerprint(doc: ParsedDocument) -> str:
@@ -339,6 +356,7 @@ def validate_file(path: Path) -> ValidationResult:
 
     validate_filename(doc, result)
     validate_header_values(doc, result)
+    validate_timestamp_plausibility(doc, result)
     validate_fingerprint(doc, result)
     validate_placeholders(doc, result)
     validate_formatting(doc, result)
@@ -372,7 +390,7 @@ def print_result(result: ValidationResult) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate governed Markdown documents against project_document_spec_r18.md"
+        description="Validate governed Markdown documents against project_document_spec_r21.md"
     )
     parser.add_argument(
         "paths",
