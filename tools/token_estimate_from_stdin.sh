@@ -8,18 +8,12 @@
 #
 # Behavior
 # --------
-# Preferred path:
-#   If Python and tiktoken are available, compute the exact token count
-#   using the o200k_base tokenizer.
+# Estimates tokens using a Markdown-tuned heuristic:
 #
-# Fallback path:
-#   If the exact tokenizer is unavailable, estimate tokens using a
-#   Markdown-tuned heuristic:
+#     tokens ≈ (chars / 3.9) + (words × 0.12) + structural_adjustments
 #
-#       tokens ≈ (chars / 3.9) + (words × 0.12) + structural_adjustments
-#
-# Why the fallback works
-# ----------------------
+# Why the heuristic works
+# -----------------------
 # Modern LLM tokenizers average roughly 1 token per 3–4 characters,
 # but Markdown specs contain structures that increase token density:
 #
@@ -37,13 +31,23 @@
 #     correction for short-token fragmentation
 #
 # structural adjustments
-#     +0.8 for code fences or tables
+#     +0.8 for code fences, tables, or separator rows
 #     +0.3 for lists
+#
+# Fingerprint row exclusion
+# -------------------------
+# The Fingerprint header row matches the table-row pattern (^\|) but is a
+# single metadata line, not a content table row. Per project_document_spec,
+# the Fingerprint row has this exact form:
+#
+#     ^| Fingerprint | [0-9a-f]{64} |$
+#
+# This row is excluded from the structural table adjustment so that its
+# presence does not inflate the token estimate.
 #
 # Accuracy
 # --------
-# Exact mode: matches tiktoken(o200k_base)
-# Fallback: typically within ±1–3% for Markdown specs
+# Typically within ±1–3% for Markdown specs
 #
 # Usage
 # -----
@@ -58,37 +62,18 @@
 # ------
 # Prints a single integer token count.
 
-
-input="$(cat)"
-
-if command -v python3 >/dev/null 2>&1; then
-  exact_count="$(
-    printf '%s' "$input" | python3 -c '
-import sys
-try:
-    import tiktoken
-except Exception:
-    raise SystemExit(1)
-
-text = sys.stdin.read()
-enc = tiktoken.get_encoding("o200k_base")
-print(len(enc.encode(text)))
-' 2>/dev/null
-  )"
-  status=$?
-
-  if [[ $status -eq 0 && -n "$exact_count" ]]; then
-    printf '%s\n' "$exact_count"
-    exit 0
-  fi
-fi
-
-printf "%s" "$input" | awk '
+awk '
 {
   chars += length($0) + 1
   words += NF
 
-  if ($0 ~ /^```|^~~~|^\|/) extra += 0.8
+  # Exclude the Fingerprint header row from the table structural adjustment.
+  # Per project_document_spec the row has exactly this form:
+  #   | Fingerprint | <64 lowercase hex chars> |
+  # It is a single metadata field, not a content table row.
+  is_fingerprint_row = ($0 ~ /^\| Fingerprint \| [0-9a-f]{64} \|$/)
+
+  if (!is_fingerprint_row && ($0 ~ /^```|^~~~|^\|/)) extra += 0.8
   if ($0 ~ /^[-*0-9]/) extra += 0.3
 }
 END {
