@@ -5,9 +5,9 @@
 | DocumentName | project_instructions |
 | Category | design-spec |
 | Revision | r46 |
-| Fingerprint | 6f33370e20e8f8ab2cc97ed185567db99c405ca103c880ab844dd0a2de742f74 |
+| Fingerprint | ef77878745bfc97bb7609e79c2153ed8d2b0e72cc7a37ff9f143b40686697d5d |
 | Status | active |
-| Timestamp | 2026-03-17T12:52:59 |
+| Timestamp | 2026-03-17T13:58:02 |
 | Authors | Chad Beach, ChatGPT-5 & Claude Sonnet 4.6 |
 
 ## Rule Index
@@ -71,7 +71,7 @@ takes precedence and the style rule is ignored for that turn.
 
 Authoritative specification:
 
-project_document_spec_r24.md
+project_document_spec_r25.md
 
 SpecAuthorityInvariant: the authoritative specification defines all document
 structure and validation rules and takes precedence in case of uncertainty.
