@@ -5,8 +5,8 @@ import argparse
 import hashlib
 import re
 import sys
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -20,9 +20,10 @@ FIELD_ORDER = [
     "Authors",
 ]
 STATUS_VALUES = {"draft", "active", "stable", "superseded"}
-DOCUMENT_NAME_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*$")
+WORD_RE = r"[a-z0-9][a-z0-9]*"
+DOCUMENT_NAME_RE = re.compile(rf"^{WORD_RE}(?:_{WORD_RE})*$")
 REVISION_RE = re.compile(r"^r([1-9][0-9]*)$")
-FILENAME_RE = re.compile(r"^([a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*)_(r[1-9][0-9]*)\.md$")
+FILENAME_RE = re.compile(rf"^({WORD_RE}(?:_{WORD_RE})*)_(r[1-9][0-9]*)\.md$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_]*>")
@@ -74,7 +75,6 @@ def read_utf8_without_bom(path: Path) -> tuple[bytes, str]:
     return raw_bytes, text
 
 
-
 def parse_document(path: Path) -> ParsedDocument:
     raw_bytes, text = read_utf8_without_bom(path)
     lines = text.splitlines()
@@ -124,7 +124,6 @@ def parse_document(path: Path) -> ParsedDocument:
     )
 
 
-
 def validate_filename(doc: ParsedDocument, result: ValidationResult) -> None:
     match = FILENAME_RE.fullmatch(doc.path.name)
     if not match:
@@ -142,19 +141,17 @@ def validate_filename(doc: ParsedDocument, result: ValidationResult) -> None:
         result.errors.append("Revision in filename does not match the Revision header value")
 
 
-
 def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> None:
     document_name = doc.header_values["DocumentName"]
     revision = doc.header_values["Revision"]
     fingerprint = doc.header_values["Fingerprint"]
-    category = doc.header_values["Category"]
     status = doc.header_values["Status"]
     timestamp = doc.header_values["Timestamp"]
 
     if not DOCUMENT_NAME_RE.fullmatch(document_name):
         result.errors.append("DocumentName is invalid under the canonical grammar")
-    if category != "design-spec":
-        result.errors.append("Category must be 'design-spec'")
+    if not doc.header_values["Category"]:
+        result.errors.append("Category must be non-empty")
     if not REVISION_RE.fullmatch(revision):
         result.errors.append("Revision must match 'r' followed by a positive integer")
     if not HEX64_RE.fullmatch(fingerprint):
@@ -177,9 +174,7 @@ def validate_timestamp_plausibility(doc: ParsedDocument, result: ValidationResul
 
     validation_time = datetime.now().replace(microsecond=0)
     if timestamp_value > validation_time:
-        result.errors.append(
-            "Timestamp cannot be in the future relative to validation time"
-        )
+        result.errors.append("Timestamp cannot be in the future relative to validation time")
 
 
 def compute_expected_fingerprint(doc: ParsedDocument) -> str:
@@ -188,7 +183,6 @@ def compute_expected_fingerprint(doc: ParsedDocument) -> str:
         raise ValidationError("could not locate the Fingerprint header row in the raw bytes")
     fingerprint_input = doc.raw_bytes[: match.start()] + doc.raw_bytes[match.end() :]
     return hashlib.sha256(fingerprint_input).hexdigest()
-
 
 
 def validate_fingerprint(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -200,10 +194,11 @@ def validate_fingerprint(doc: ParsedDocument, result: ValidationResult) -> None:
 
     actual = doc.header_values["Fingerprint"]
     if actual != expected:
-        result.errors.append(
-            f"Fingerprint mismatch: header has {actual}, expected {expected}"
-        )
+        result.errors.append(f"Fingerprint mismatch: header has {actual}, expected {expected}")
 
+
+def strip_inline_code(line: str) -> str:
+    return INLINE_CODE_RE.sub("", line)
 
 
 def validate_placeholders(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -231,12 +226,6 @@ def validate_placeholders(doc: ParsedDocument, result: ValidationResult) -> None
             result.errors.append(
                 f"line {line_number}: angle-bracket placeholder is prohibited: {match.group(0)}"
             )
-
-
-
-def strip_inline_code(line: str) -> str:
-    return INLINE_CODE_RE.sub("", line)
-
 
 
 def validate_formatting(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -275,7 +264,6 @@ def validate_formatting(doc: ParsedDocument, result: ValidationResult) -> None:
                 )
 
 
-
 def validate_spelling(doc: ParsedDocument, result: ValidationResult) -> None:
     in_fenced_code = False
     fence_delimiter = ""
@@ -301,7 +289,6 @@ def validate_spelling(doc: ParsedDocument, result: ValidationResult) -> None:
                 result.errors.append(
                     f"line {idx}: use American English spelling '{prefer}' instead of '{avoid}'"
                 )
-
 
 
 def validate_revision_sequence(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -338,7 +325,6 @@ def validate_revision_sequence(doc: ParsedDocument, result: ValidationResult) ->
         )
 
 
-
 def validate_file(path: Path) -> ValidationResult:
     result = ValidationResult(path=path)
     if not path.exists():
@@ -365,7 +351,6 @@ def validate_file(path: Path) -> ValidationResult:
     return result
 
 
-
 def iter_targets(paths: Iterable[Path], recursive: bool) -> list[Path]:
     collected: list[Path] = []
     for path in paths:
@@ -377,7 +362,6 @@ def iter_targets(paths: Iterable[Path], recursive: bool) -> list[Path]:
     return collected
 
 
-
 def print_result(result: ValidationResult) -> None:
     status = "PASS" if result.ok else "FAIL"
     print(f"[{status}] {result.path}")
@@ -387,10 +371,9 @@ def print_result(result: ValidationResult) -> None:
         print(f"  WARN: {warning}")
 
 
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate governed Markdown documents against project_document_spec_r21.md"
+        description="Validate governed Markdown documents against project_document_spec_r25.md"
     )
     parser.add_argument(
         "paths",
@@ -405,7 +388,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="recurse into directories",
     )
     return parser
-
 
 
 def main() -> int:
