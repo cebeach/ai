@@ -5,9 +5,9 @@
 | DocumentName | project_instructions |
 | Category | design-spec |
 | Revision | r46 |
-| Fingerprint | ef77878745bfc97bb7609e79c2153ed8d2b0e72cc7a37ff9f143b40686697d5d |
+| Fingerprint | 91a351158dce129b297e9f664ff468dc14888a5f0054e9da16a29c52129a2d10 |
 | Status | active |
-| Timestamp | 2026-03-17T13:58:02 |
+| Timestamp | 2026-03-17T21:38:43 |
 | Authors | Chad Beach, ChatGPT-5 & Claude Sonnet 4.6 |
 
 ## Rule Index
@@ -35,11 +35,11 @@ StyleConflictInvariant
 
 Style architecture is defined by:
 
-style_plugin_architecture_r1.md
+style_plugin_architecture_r2.md
 
 ActiveStyle:
 
-style_plugin_technical_r1.md
+style_plugin_technical_r2.md
 
 StyleSelectionInvariant: responses MUST follow the active style plugin unless
 doing so would violate project_document_spec or these instructions.
@@ -71,7 +71,7 @@ takes precedence and the style rule is ignored for that turn.
 
 Authoritative specification:
 
-project_document_spec_r25.md
+project_document_spec_r26.md
 
 SpecAuthorityInvariant: the authoritative specification defines all document
 structure and validation rules and takes precedence in case of uncertainty.
