@@ -31,7 +31,7 @@ STATUS_VALUES = {"draft", "active", "stable", "superseded"}
 WORD_RE = r"[a-z0-9][a-z0-9]*"
 DOCUMENT_NAME_RE = re.compile(rf"^{WORD_RE}(?:_{WORD_RE})*$")
 REVISION_RE = re.compile(r"^r([1-9][0-9]*)$")
-FILENAME_RE = re.compile(rf"^({WORD_RE}(?:_{WORD_RE})*)_(r[1-9][0-9]*)\.md$")
+FILENAME_RE = re.compile(rf"^({WORD_RE}(?:_{WORD_RE})*)\.md$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_]*>")
@@ -136,17 +136,15 @@ def validate_filename(doc: ParsedDocument, result: ValidationResult) -> None:
     match = FILENAME_RE.fullmatch(doc.path.name)
     if not match:
         result.errors.append(
-            "filename must match '{DocumentName}_{Revision}.md' using canonical grammar"
+            "filename must match '{DocumentName}.md' using canonical grammar"
         )
         return
 
-    filename_document_name, filename_revision = match.groups()
+    filename_document_name = match.group(1)
     if filename_document_name != doc.header_values["DocumentName"]:
         result.errors.append(
             "DocumentName in filename does not match the DocumentName header value"
         )
-    if filename_revision != doc.header_values["Revision"]:
-        result.errors.append("Revision in filename does not match the Revision header value")
 
 
 def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> None:
@@ -168,14 +166,18 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
     if not REVISION_RE.fullmatch(revision):
         result.errors.append("Revision must match 'r' followed by a positive integer")
     if not HEX64_RE.fullmatch(fingerprint):
-        result.errors.append("Fingerprint must be a 64-character lowercase hexadecimal SHA-256 digest")
+        result.errors.append(
+            "Fingerprint must be a 64-character lowercase hexadecimal SHA-256 digest"
+        )
     if status not in STATUS_VALUES:
         result.errors.append("Status must be one of: draft, active, stable, superseded")
     if not TIMESTAMP_RE.fullmatch(timestamp):
         result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS")
 
 
-def validate_timestamp_plausibility(doc: ParsedDocument, result: ValidationResult) -> None:
+def validate_timestamp_plausibility(
+    doc: ParsedDocument, result: ValidationResult
+) -> None:
     timestamp = doc.header_values["Timestamp"]
     if not TIMESTAMP_RE.fullmatch(timestamp):
         return
@@ -187,13 +189,17 @@ def validate_timestamp_plausibility(doc: ParsedDocument, result: ValidationResul
 
     validation_time = datetime.now().replace(microsecond=0)
     if timestamp_value > validation_time:
-        result.errors.append("Timestamp cannot be in the future relative to validation time")
+        result.errors.append(
+            "Timestamp cannot be in the future relative to validation time"
+        )
 
 
 def compute_expected_fingerprint(doc: ParsedDocument) -> str:
     match = FINGERPRINT_ROW_RE.search(doc.raw_bytes)
     if not match:
-        raise ValidationError("could not locate the Fingerprint header row in the raw bytes")
+        raise ValidationError(
+            "could not locate the Fingerprint header row in the raw bytes"
+        )
     fingerprint_input = doc.raw_bytes[: match.start()] + doc.raw_bytes[match.end() :]
     return hashlib.sha256(fingerprint_input).hexdigest()
 
@@ -207,7 +213,9 @@ def validate_fingerprint(doc: ParsedDocument, result: ValidationResult) -> None:
 
     actual = doc.header_values["Fingerprint"]
     if actual != expected:
-        result.errors.append(f"Fingerprint mismatch: header has {actual}, expected {expected}")
+        result.errors.append(
+            f"Fingerprint mismatch: header has {actual}, expected {expected}"
+        )
 
 
 def strip_inline_code(line: str) -> str:
@@ -267,7 +275,9 @@ def validate_formatting(doc: ParsedDocument, result: ValidationResult) -> None:
         if idx >= doc.body_start_line_index + 1 and line.startswith("#"):
             previous = doc.lines[idx - 2]
             if previous != "":
-                result.errors.append(f"line {idx}: section headings must be separated by a blank line")
+                result.errors.append(
+                    f"line {idx}: section headings must be separated by a blank line"
+                )
 
         if line.endswith("\\") and not line.startswith("    "):
             without_inline_code = strip_inline_code(line)
@@ -304,40 +314,6 @@ def validate_spelling(doc: ParsedDocument, result: ValidationResult) -> None:
                 )
 
 
-def validate_revision_sequence(doc: ParsedDocument, result: ValidationResult) -> None:
-    revision_match = REVISION_RE.fullmatch(doc.header_values["Revision"])
-    if not revision_match:
-        return
-
-    current_revision = int(revision_match.group(1))
-    if current_revision < 1:
-        result.errors.append("Revision numbers must start at r1")
-        return
-
-    siblings = list(doc.path.parent.glob(f"{doc.header_values['DocumentName']}_r*.md"))
-    revision_numbers: set[int] = set()
-    for sibling in siblings:
-        match = FILENAME_RE.fullmatch(sibling.name)
-        if not match:
-            continue
-        sibling_document_name, sibling_revision = match.groups()
-        if sibling_document_name != doc.header_values["DocumentName"]:
-            continue
-        revision_match = REVISION_RE.fullmatch(sibling_revision)
-        if revision_match:
-            revision_numbers.add(int(revision_match.group(1)))
-
-    if current_revision not in revision_numbers:
-        revision_numbers.add(current_revision)
-
-    missing_lower_revisions = [n for n in range(1, current_revision) if n not in revision_numbers]
-    if missing_lower_revisions:
-        result.warnings.append(
-            "could not verify monotonic revision history completely; missing sibling files for "
-            + ", ".join(f"r{n}" for n in missing_lower_revisions)
-        )
-
-
 def validate_file(path: Path) -> ValidationResult:
     result = ValidationResult(path=path)
     if not path.exists():
@@ -360,7 +336,6 @@ def validate_file(path: Path) -> ValidationResult:
     validate_placeholders(doc, result)
     validate_formatting(doc, result)
     validate_spelling(doc, result)
-    validate_revision_sequence(doc, result)
     return result
 
 
