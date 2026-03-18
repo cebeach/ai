@@ -12,13 +12,21 @@ from typing import Iterable
 
 FIELD_ORDER = [
     "DocumentName",
-    "Category",
+    "Role",
     "Revision",
     "Fingerprint",
     "Status",
     "Timestamp",
     "Authors",
 ]
+ROLE_VALUES = {
+    "specification",
+    "proposal",
+    "plan",
+    "status",
+    "guide",
+    "vision",
+}
 STATUS_VALUES = {"draft", "active", "stable", "superseded"}
 WORD_RE = r"[a-z0-9][a-z0-9]*"
 DOCUMENT_NAME_RE = re.compile(rf"^{WORD_RE}(?:_{WORD_RE})*$")
@@ -143,6 +151,7 @@ def validate_filename(doc: ParsedDocument, result: ValidationResult) -> None:
 
 def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> None:
     document_name = doc.header_values["DocumentName"]
+    role = doc.header_values["Role"]
     revision = doc.header_values["Revision"]
     fingerprint = doc.header_values["Fingerprint"]
     status = doc.header_values["Status"]
@@ -150,8 +159,12 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
 
     if not DOCUMENT_NAME_RE.fullmatch(document_name):
         result.errors.append("DocumentName is invalid under the canonical grammar")
-    if not doc.header_values["Category"]:
-        result.errors.append("Category must be non-empty")
+    if not role:
+        result.errors.append("Role must be non-empty")
+    elif role not in ROLE_VALUES:
+        result.errors.append(
+            "Role must be one of: specification, proposal, plan, status, guide, vision"
+        )
     if not REVISION_RE.fullmatch(revision):
         result.errors.append("Revision must match 'r' followed by a positive integer")
     if not HEX64_RE.fullmatch(fingerprint):
@@ -373,7 +386,7 @@ def print_result(result: ValidationResult) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate governed Markdown documents against project_document_spec_r25.md"
+        description="Validate governed Markdown documents against project_document_spec_r27.md"
     )
     parser.add_argument(
         "paths",
