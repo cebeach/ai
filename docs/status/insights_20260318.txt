@@ -24,10 +24,6 @@ of the internals of llama-server and the API used to speak with the model.  So I
 Claude Code to traverse the llama-server code base and produce a high-level architecture overview
 replete with ascii art diagrams.
 
-x I started using Claude to produce an architectural overview of llama-server, and thought x
-to try and see if I could build a project on claude.ai for the same so that I could have x a
-stable home for the work while I got used to Claude Code. I ran into a wall here
-
 Next, I gave OpenCode a try and, inspired by the progress I was making, decided to use describing
 the llama.cpp architecture as an acid test. No problem. Emboldened, I decided to try enabling
 MCP servers. For fun, I tried a MCP server [reference] for Trilium Notes and was thrilled to
