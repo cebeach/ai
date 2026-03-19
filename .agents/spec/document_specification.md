@@ -84,14 +84,6 @@ The fingerprint identifies a document revision by content.
 Fingerprint := SHA256(FingerprintInput)
 ```
 
-### Revision Binding
-
-- The fingerprint binds the timestamp and document content to the revision state.
-- The `Timestamp` field is included in the fingerprint input.
-- Any change to the `Timestamp` field MUST change the computed fingerprint.
-- Any change to document content outside the `Fingerprint` row MUST change the computed fingerprint.
-- Therefore the fingerprint identifies the complete working revision state.
-
 ## RevisionDelta
 
 When producing a new revision, the system MUST report a summary of changes to the
@@ -140,18 +132,6 @@ in the governed document.
 - A governed artifact MUST NOT be described as compliant, validated, complete, or ready for delivery unless `DeliverableRevision` is true.
 
 ## Correctness Invariant
-
-A finalized revision is correct if and only if:
-
-1. the document structure satisfies this specification
-2. the filename and header metadata are consistent
-3. `Timestamp` equals the output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime
-4. the `Fingerprint` equals the SHA-256 digest of the document bytes with the
-   `Fingerprint` header row removed
-5. `diff(rN, rN+1)` contains no deletions unless each deleted span is explicitly authorized
-6. the canonical validator has been executed successfully against the exact
-   artifact to be delivered
-7. the artifact delivered is byte-identical to the artifact validated
 
 ValidatedArtifact := artifact for which `document_validate.py` returned success
 ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
