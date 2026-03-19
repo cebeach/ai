@@ -4,10 +4,10 @@
 |-------|-------|
 | DocumentName | document_specification |
 | Role | specification |
-| Revision | r1 |
-| Fingerprint | 4075185f00394348cdab28617cb4343ee853a79f043728541026886f07c6e4c9 |
+| Revision | r4 |
+| Fingerprint | fbbedb33b0019a8653b6bf47e0c3a17c21a16dd1dd9771d9c6172e3a528caf2c |
 | Status | active |
-| Timestamp | 2026-03-18T02:18:10 |
+| Timestamp | 2026-03-18T17:01:31 |
 | Authors | Chad Beach & ChatGPT-5 |
 
 ## Purpose
@@ -18,11 +18,6 @@
 ## Interpretation
 
 All rules below are normative unless explicitly labeled Allowed.
-
-## Filename
-
-- `{DocumentName}.md`
-- The filename MUST follow canonical grammar.
 
 ## Role Semantics
 
@@ -64,13 +59,9 @@ ValidationTime := time at which the canonical validator evaluates the document
 ## Timestamp Semantics
 
 - The `Timestamp` field records the local wall-clock time of the human author performing the revision event.
-- The `Timestamp` value MUST represent a real document authoring or revision event.
-- The `Timestamp` value MUST reflect the author's local wall-clock time.
-- The `Timestamp` value MUST NOT be invented or copied from an unrelated revision.
+- The `Timestamp` value MUST reflect the author's real local wall-clock time and MUST NOT be invented or copied from an unrelated revision.
 - The `Timestamp` value MUST NOT be later than the time the revision is produced.
-- `Timestamp ≤ RevisionEventTime`
 - `Timestamp SHOULD be approximately equal to RevisionEventTime`
-- The `Timestamp` field MUST correspond to the document bytes used for fingerprint computation.
 
 ## Header
 
@@ -140,54 +131,21 @@ Each revision MUST include a summary of changes:
 
 ## ContentPreservationInvariant
 
-- The system MUST preserve all existing document content unless the user explicitly requests modification or removal.
+- When producing revision `rN+1` from revision `rN`, all content from `rN` MUST be preserved unless the user explicitly authorizes its removal or replacement.
+- Compression, summarization, abbreviation, or omission of prior content counts as removal unless explicitly authorized.
 
 ## AI Generation Contract
 
 - generate draft → validate → fix violations → repeat until pass
-- A document MUST NOT be presented as compliant until validation succeeds.
 
-## Completeness Invariant
+## ValidationInvariant
 
-- A revision MUST preserve all non-deleted content from the prior revision unless the user explicitly authorizes removal.
-- Content omission without explicit instruction is a specification violation.
-
-
-## Validation Execution Invariant
-
-- Before presentation or delivery, the system MUST execute `document_validate.py`
-  against the exact artifact to be delivered.
-- A governed artifact MUST NOT be described as compliant, validated, complete,
-  or ready for download unless that validator run exits successfully.
-
-## Validation Provenance Invariant
-
-- The delivery response MUST include validation evidence for the delivered artifact.
-- Validation evidence MUST identify:
-  - the validator used
-  - the target file validated
-  - the validation result
-- A bare assertion of compliance is insufficient.
-
-## Byte Identity Invariant
-
-- The artifact delivered MUST be byte-identical to the artifact validated.
-- Any modification after a successful validator run invalidates that run and
-  requires re-validation.
-
-## Revision Preservation Invariant
-
-- When producing revision `rN+1` from revision `rN`, all content from `rN`
-  MUST be preserved unless the user explicitly authorizes its removal or replacement.
-- Compression, summarization, abbreviation, or omission of prior content counts
-  as removal unless explicitly authorized.
-
-## Output Gate
-
-- Before a governed document may be presented or delivered it MUST pass the Output Gate.
-- Automated validation MUST be performed using `document_validate.py`
+- Before presentation or delivery, the system MUST execute `document_validate.py` against the exact artifact to be delivered.
 - Any errors reported by the canonical validator MUST be treated as specification violations.
 - Validator success is necessary but not sufficient for correctness.
+- The delivery response MUST include validation evidence identifying the validator used, the target file validated, and the validation result.
+- The artifact delivered MUST be byte-identical to the artifact validated; any modification after a successful validator run requires re-validation.
+- A governed artifact MUST NOT be described as compliant, validated, complete, or ready for delivery unless `DeliverableRevision` is true.
 
 ## Correctness Invariant
 

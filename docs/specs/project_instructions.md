@@ -4,10 +4,10 @@
 |-------|-------|
 | DocumentName | project_instructions |
 | Role | specification |
-| Revision | r1 |
-| Fingerprint | 32b8a17419f8daf00ab85c65de6c35342002955d5f451807ad0ee8a9a23a5e6f |
+| Revision | r3 |
+| Fingerprint | a9f4c570fc6c7fb663bd7ae0bcb7b15c4c2a00f3d5912ea7a9d3b51d0fbdde39 |
 | Status | active |
-| Timestamp | 2026-03-18T02:21:52 |
+| Timestamp | 2026-03-18T17:15:24 |
 | Authors | Chad Beach, ChatGPT-5 & Claude Sonnet 4.6 |
 
 ## Rule Index
@@ -35,19 +35,16 @@
 
 - Style architecture is defined by: style_plugin_architecture.md
 - ActiveStyle: style_plugin_technical.md
-- StyleSelectionInvariant: responses MUST follow the active style plugin unless doing so would violate
-  project_document_spec or these instructions.
-- StyleBoundaryInvariant: style plugins modify presentation only and MUST NOT modify specification authority,
-  validation behavior, command grammar, revision semantics, or output gate rules.
+- StyleSelectionInvariant and StyleBoundaryInvariant are defined in style_plugin_architecture.md.
+- StyleBoundaryInvariant addendum: style plugins MUST NOT modify specification authority,
+  validation behavior, command grammar, or revision semantics.
 
 ## Style Anchoring
 
 - StyleAnchorInvariant: immediately before generating a response, the system MUST anchor the invariants
   defined by the active style plugin. The anchored invariants SHOULD include at least: ConcreteInvariant,
   PrecisionInvariant, SystemsInvariant, ToneInvariant
-- StyleConflictInvariant: if a style rule conflicts with a rule defined by project_document_spec or
-  project_instructions, the higher authority rule takes precedence and the style rule is ignored for
-  that turn.
+- StyleConflictInvariant is defined in style_plugin_architecture.md.
 
 ## Specification Authority
 
@@ -55,15 +52,9 @@
 - SpecAuthorityInvariant: the authoritative specification defines all document structure and validation
   rules and takes precedence in case of uncertainty.
 - Rules not present in the specification MUST NOT be inferred.
-
-## Specification Lock
-
 - Apply SpecAuthorityInvariant before generating or modifying governed Markdown.
-
-## Constrained Generation
-
-- Generate artifacts strictly under the authoritative specification; anything
-  not explicitly permitted by the specification is prohibited.
+- Generate artifacts strictly under the authoritative specification; anything not explicitly permitted
+  by the specification is prohibited.
 
 ## Data Boundary
 
@@ -77,8 +68,7 @@
   immediately before finalizing the document bytes: `TZ='America/Los_Angeles' date +"%Y-%m-%dT%H:%M:%S"`
 - The command MUST be executed at the time of the revision event.
 - The output MUST be used verbatim as the `Timestamp` value.
-- The `Timestamp` MUST NOT be invented, copied from another revision, or derived by any other means.
-- The `Timestamp` MUST NOT be later than the time the revision is produced.
+- Additional constraints are defined by document_specification Timestamp Semantics.
 
 ## Command Protocol
 
@@ -108,20 +98,10 @@ The following invariants apply to generation:
 - CommandProtocolInvariant
 - DataBoundaryInvariant
 
-## Output Gate
-
-- Generated artifacts MUST pass the Output Gate before presentation.
-
 ## Automated Validation
 
 - ValidationInvariant: governed artifacts MUST pass `document_validate.py` before presentation.
 - Validation errors MUST be corrected and validation repeated until no errors remain.
-
-## Revision Policy
-
-- Documents follow a forward-only revision model.
-- Increment revision when modifying a document.
-- Maintain a valid header.
 
 ## Artifact Delivery
 
