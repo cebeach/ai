@@ -32,7 +32,7 @@ WORD_RE = r"[a-z0-9][a-z0-9]*"
 DOCUMENT_NAME_RE = re.compile(rf"^{WORD_RE}(?:_{WORD_RE})*$")
 REVISION_RE = re.compile(r"^r([1-9][0-9]*)$")
 FILENAME_RE = re.compile(rf"^({WORD_RE}(?:_{WORD_RE})*)\.md$")
-TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} UTC$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_]*>")
 AVOID_SPELLINGS = {
@@ -172,7 +172,7 @@ def validate_header_values(doc: ParsedDocument, result: ValidationResult) -> Non
     if status not in STATUS_VALUES:
         result.errors.append("Status must be one of: draft, active, stable, superseded")
     if not TIMESTAMP_RE.fullmatch(timestamp):
-        result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS")
+        result.errors.append("Timestamp must match YYYY-MM-DDTHH:MM:SS UTC")
 
 
 def validate_timestamp_plausibility(
@@ -182,12 +182,12 @@ def validate_timestamp_plausibility(
     if not TIMESTAMP_RE.fullmatch(timestamp):
         return
     try:
-        timestamp_value = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S")
+        timestamp_value = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S UTC")
     except ValueError as exc:
         result.errors.append(f"Timestamp is not a valid calendar time: {exc}")
         return
 
-    validation_time = datetime.now().replace(microsecond=0)
+    validation_time = datetime.utcnow().replace(microsecond=0)
     if timestamp_value > validation_time:
         result.errors.append(
             "Timestamp cannot be in the future relative to validation time"

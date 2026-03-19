@@ -6,8 +6,8 @@ Rules implemented from project_document_spec_r21 and project_instructions_r34:
 - require UTF-8 without BOM
 - preserve all existing bytes and line endings exactly outside the updated rows
 - require exactly one Timestamp header row and exactly one Fingerprint header row
-- the Timestamp defaults to the current US/Pacific wall-clock time, equivalent to:
-      TZ='America/Los_Angeles' date +"%Y-%m-%dT%H:%M:%S"
+- the Timestamp defaults to the current UTC time, equivalent to:
+      date -u +"%Y-%m-%dT%H:%M:%S UTC"
   and may be overridden by the caller via --timestamp
 - compute the digest from the bytes containing the updated Timestamp row, with
   only the Fingerprint header row removed, including its trailing newline
@@ -22,11 +22,8 @@ import argparse
 import hashlib
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
-
-_LA_TZ = ZoneInfo("America/Los_Angeles")
 
 
 class FingerprintError(Exception):
@@ -41,7 +38,7 @@ TIMESTAMP_ROW_RE = re.compile(
     rb"^\| Timestamp \| (?P<value>.*?) \|(?P<newline>\r\n|\n)",
     re.MULTILINE,
 )
-TIMESTAMP_TEXT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+TIMESTAMP_TEXT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} UTC$")
 
 
 def read_utf8_without_bom(path: Path) -> bytes:
@@ -73,18 +70,18 @@ def find_timestamp_row(raw: bytes) -> re.Match[bytes]:
 
 
 def current_timestamp_text() -> str:
-    """Return the current US/Pacific wall-clock time as YYYY-MM-DDTHH:MM:SS.
+    """Return the current UTC time as YYYY-MM-DDTHH:MM:SS UTC.
 
-    Equivalent to: TZ='America/Los_Angeles' date +"%Y-%m-%dT%H:%M:%S"
+    Equivalent to: date -u +"%Y-%m-%dT%H:%M:%S UTC"
     """
-    return datetime.now(_LA_TZ).strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
 
 
 def validate_timestamp_text(timestamp: str) -> str:
     if not TIMESTAMP_TEXT_RE.fullmatch(timestamp):
         raise FingerprintError("timestamp must match YYYY-MM-DDTHH:MM:SS")
     try:
-        datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S")
+        datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S UTC")
     except ValueError as exc:
         raise FingerprintError(f"timestamp is not a valid calendar time: {exc}") from exc
     return timestamp
@@ -136,8 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Update the Timestamp and Fingerprint for a governed Markdown document in place, "
             "then print the computed fingerprint to stdout. "
-            "By default the Timestamp is set to the current US/Pacific wall-clock time, "
-            "equivalent to: TZ='America/Los_Angeles' date +\"%Y-%m-%dT%H:%M:%S\". "
+            "By default the Timestamp is set to the current UTC time, "
+            "equivalent to: date -u +\"%Y-%m-%dT%H:%M:%S UTC\". "
             "Use --timestamp to supply an explicit value instead."
         )
     )
@@ -147,8 +144,8 @@ def build_parser() -> argparse.ArgumentParser:
         dest="timestamp",
         default=None,
         help=(
-            "Override the Timestamp with an explicit value in YYYY-MM-DDTHH:MM:SS format. "
-            "When omitted, defaults to the current US/Pacific wall-clock time."
+            "Override the Timestamp with an explicit value in 'YYYY-MM-DDTHH:MM:SS UTC' format. "
+            "When omitted, defaults to the current UTC time."
         ),
     )
     return parser

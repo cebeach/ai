@@ -40,7 +40,7 @@ Placeholder := "{" Identifier "}"
 FingerprintInput := UTF8(document bytes with the Fingerprint header row removed, including its trailing newline)
 Fingerprint := SHA256(FingerprintInput)
 
-Timestamp := YYYY "-" MM "-" DD "T" hh ":" mm ":" ss
+Timestamp := YYYY "-" MM "-" DD "T" hh ":" mm ":" ss " UTC"
 
 RevisionEventTime := time at which the working revision bytes are finalized
 ValidationTime := time at which the canonical validator evaluates the document
@@ -48,10 +48,8 @@ ValidationTime := time at which the canonical validator evaluates the document
 
 ## Timestamp Semantics
 
-- The `Timestamp` field records the local wall-clock time of the human author performing the revision event.
-- The `Timestamp` value MUST reflect the author's real local wall-clock time and MUST NOT be invented or copied from an unrelated revision.
-- The `Timestamp` value MUST NOT be later than the time the revision is produced.
-- `Timestamp SHOULD be approximately equal to RevisionEventTime`
+- The `Timestamp` value is the output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime.
+- The value MUST NOT be invented or copied from a prior revision.
 
 ## Header
 
