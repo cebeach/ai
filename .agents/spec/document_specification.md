@@ -100,18 +100,12 @@ in the governed document.
 
 - A finalized revision is an immutable snapshot of document state.
 - The fingerprint is the content-derived identifier of that snapshot.
-- The document MUST be interpreted as UTF-8 without BOM.
-- Line endings MUST be preserved exactly as they appear in the document.
-- Only the `Fingerprint` header row is removed.
-- All other content remains unchanged.
-- Whitespace outside the removed row MUST NOT be altered.
 
 ## Markdown Production
 
 - Author Markdown directly as UTF-8 text.
 - Source Markdown is the primary artifact.
 - Pandoc, pypandoc, document conversion pipelines, tools that rewrite Markdown structure, and generating Markdown from host-language string literals are prohibited.
-
 
 ## ContentPreservationInvariant
 
@@ -129,21 +123,16 @@ in the governed document.
 - Validator success is necessary but not sufficient for correctness.
 - The delivery response MUST include validation evidence identifying the validator used, the target file validated, and the validation result.
 - The artifact delivered MUST be byte-identical to the artifact validated; any modification after a successful validator run requires re-validation.
-- A governed artifact MUST NOT be described as compliant, validated, complete, or ready for delivery unless `DeliverableRevision` is true.
 
 ## Correctness Invariant
 
+```
 ValidatedArtifact := artifact for which `document_validate.py` returned success
 ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
 ContentComplete := diff(rN, rN+1) contains no unauthorized deletions
-
-```
 CorrectRevision := valid_structure ∧ consistent_metadata ∧ TimestampInvariant ∧ fingerprint_matches_bytes ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
 DeliverableRevision := CorrectRevision ∧ validation_succeeded ∧ delivery_provenance_present
 ```
-
-- A document MUST NOT be described as correct, compliant, validated, or ready for delivery unless `DeliverableRevision` is true.
-
 
 ## Placeholders
 
