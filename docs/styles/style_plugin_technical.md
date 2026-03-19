@@ -4,15 +4,21 @@
 |-------|-------|
 | DocumentName | style_plugin_technical |
 | Role | specification |
-| Revision | r2 |
-| Fingerprint | 55e6bb00fce75f5bbdd2f79df700f05b6a898f39b9055fb7ddd79f8ad247e6f3 |
+| Revision | r3 |
+| Fingerprint | 57c5826a59453556cd424e3458ccae4f12f6b3d9f5431e88b4e61434f781f70d |
 | Status | draft |
-| Timestamp | 2026-03-18T01:19:17 |
+| Timestamp | 2026-03-18T17:59:18 |
 | Authors | ChatGPT |
 
 ## Purpose
 
 Ultra-compressed stylistic rules for system prompts.
+
+## RevisionDelta
+
+### r3
+
+- modified: Invariants — LexicalExclusionInvariant shortened to reference style_plugin_architecture; exempt context enumeration is now authoritative in style_plugin_architecture Style Invariants
 
 ## PreferenceOrder
 
@@ -31,7 +37,7 @@ Ultra-compressed stylistic rules for system prompts.
 - ToneInvariant: Restrained analytical tone. Avoid hype or motivational rhetoric.
 - WitInvariant (Allowed): Brief dry humor allowed if clarity preserved.
 - ImportanceInvariant: If something matters state why (ambiguity↓, verifiability↑, failure↓, cost↓).
-- LexicalExclusionInvariant: Words listed in `BannedWords` MUST NOT appear in assistant-authored prose except in exempt contexts (quotes, code, filenames, identifiers, required specification terminology).
+- LexicalExclusionInvariant: as defined by style_plugin_architecture.
 
 ## Forbidden
 

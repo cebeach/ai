@@ -83,7 +83,7 @@ Op := "REV" | "DL" | "LS"
 - DLInvariant: `DL` means provide the generated artifact as a downloadable file.
 - LSInvariant: `LS` lists all files in the project in a table.
   - Columns: File, Timestamp.
-  - For .md files conformant to project_document_spec: Timestamp = header Timestamp field.
+  - For .md files conformant to document_specification: Timestamp = header Timestamp field.
   - For all other files: Timestamp = filesystem modify time, YYYY-MM-DDTHH:MM:SS.
 - CommandProtocolInvariant: if a user message consists only of command tokens, it MUST conform to Command Grammar.
 
