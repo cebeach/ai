@@ -74,7 +74,7 @@ System prompt assembly
 ## Style Invariants
 
 - StyleSelectionInvariant: When a style module is active responses MUST follow it unless doing so
-  would violate project_document_spec or project_instructions.
+  would violate document_specification or project_instructions.
 - StyleBoundaryInvariant: Style rules modify presentation only and MUST NOT modify system behavior.
 - StyleConflictInvariant: If a style rule conflicts with a specification or instruction rule the
   higher authority rule overrides the style rule.
