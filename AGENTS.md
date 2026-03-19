@@ -20,12 +20,6 @@ This is a monorepo for Chad's pathfinding work on bootstrapping a locally hosted
 ### Validation
 - ValidationInvariant
 
-### Command Protocol
-- REVInvariant
-- DLInvariant
-- LSInvariant
-- CommandProtocolInvariant
-
 ### Style
 - StyleSelectionInvariant
 - StyleBoundaryInvariant
@@ -34,27 +28,27 @@ This is a monorepo for Chad's pathfinding work on bootstrapping a locally hosted
 
 ## Style Configuration
 
-- Style architecture is defined by: docs/specs/style_plugin_architecture.md
-- ActiveStyle: docs/styles/style_plugin_technical.md
-- StyleSelectionInvariant and StyleBoundaryInvariant are defined in style_plugin_architecture.md.
+- Style architecture is defined by: .agents/style/style_architecture.md
+- ActiveStyle: .agents/style/style_plugin_technical.md
+- StyleSelectionInvariant and StyleBoundaryInvariant are defined in .agents/style/style_architecture.md.
 - StyleBoundaryInvariant addendum: style plugins MUST NOT modify specification authority,
-  validation behavior, command grammar, or revision semantics.
+  validation behavior, or revision semantics.
 
 ## Style Anchoring
 
 - StyleAnchorInvariant: immediately before generating a response, the system MUST anchor the invariants
   defined by the active style plugin. The anchored invariants SHOULD include at least: ConcreteInvariant,
   PrecisionInvariant, SystemsInvariant, ToneInvariant
-- StyleConflictInvariant is defined in style_plugin_architecture.md.
+- StyleConflictInvariant is defined in .agents/style/style_architecture.md.
 
 ## Specification Authority
 
-- Authoritative specification: docs/specs/document_specification.md
+- Authoritative specification: .agents/spec/document_specification.md
 - SpecAuthorityInvariant: the authoritative specification defines all document structure and validation
   rules and takes precedence in case of uncertainty.
 - Rules not present in the specification MUST NOT be inferred.
 - Apply SpecAuthorityInvariant before generating or modifying governed Markdown.
-- Generate artifacts strictly under the authoritative specification; anything not explicitly permitted
+- Generate documents strictly under the authoritative specification; anything not explicitly permitted
   by the specification is prohibited.
 
 ## Data Boundary
@@ -71,40 +65,19 @@ This is a monorepo for Chad's pathfinding work on bootstrapping a locally hosted
 - The output MUST be used verbatim as the `Timestamp` value.
 - Additional constraints are defined by document_specification Timestamp Semantics.
 
-## Command Protocol
-
-- Command Grammar
-
-```
-Command := Op { " " Op }
-Op := "REV" | "DL" | "LS"
-```
-
-- REVInvariant: `REV` means generate the next revision of the active artifact, where next revision = highest existing sibling revision + 1.
-- DLInvariant: `DL` means provide the generated artifact as a downloadable file.
-- LSInvariant: `LS` lists all files in the project in a table.
-  - Columns: File, Timestamp.
-  - For .md files conformant to document_specification: Timestamp = header Timestamp field.
-  - For all other files: Timestamp = filesystem modify time, YYYY-MM-DDTHH:MM:SS.
-- CommandProtocolInvariant: if a user message consists only of command tokens, it MUST conform to Command Grammar.
-
 ## Constraint Anchor
 
 The following invariants apply to generation:
 - SpecAuthorityInvariant
 - ValidationInvariant
-- REVInvariant
-- DLInvariant
-- LSInvariant
-- CommandProtocolInvariant
 - DataBoundaryInvariant
 
 ## Automated Validation
 
-- ValidationInvariant: governed artifacts MUST pass `tools/document_validate.py` before presentation.
+- ValidationInvariant: governed documents MUST pass `tools/document_validate.py` before presentation.
 - Validation errors MUST be corrected and validation repeated until no errors remain.
 
-## Artifact Delivery
+## Document Delivery
 
 - Generated governed documents MUST be provided as downloadable files.
 - Do NOT display full document contents verbatim in chat unless explicitly requested.
