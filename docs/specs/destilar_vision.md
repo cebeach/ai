@@ -1,9 +1,14 @@
 # destilar vision
 
-Revision: r1\
-Timestamp: 2026-03-15T01:00:03Z
-
-
+| Field | Value |
+|-------|-------|
+| DocumentName | destilar_vision |
+| Role | vision |
+| Revision | r1 |
+| Fingerprint | bccf3f2e62bfc0b90b66c343fd2df4bfb9f0d025d76cb4cbe87056613597e72e |
+| Status | draft |
+| Timestamp | 2026-03-19T00:26:58 |
+| Authors | Chad |
 
 `destilar` is useful as a repository archiver, but its more interesting long-term role is as a **source-ingestion front end for LLM analysis**.
 
@@ -16,7 +21,7 @@ repo → smaller tarball
 but:
 
 ```text
-repo → task-shaped corpus → structural metadata → analysis contract
+repo → task-shaped collection → structural metadata → analysis contract
 ```
 
 And that is a meaningfully different thing.
@@ -60,13 +65,13 @@ That leads to a different set of goals:
 
 That last point is important.
 
-The right corpus for:
+The right collection for:
 
 ```text
 How does llama-server reach CUDA kernels?
 ```
 
-is not the same as the right corpus for:
+is not the same as the right collection for:
 
 ```text
 How is llama.cpp built and packaged on Debian?
@@ -94,7 +99,7 @@ That runtime is explicitly trying to preserve token efficiency by keeping model-
 
 `destilar` is essentially the same idea, applied to source code ingestion:
 
-* keep the model-facing corpus small
+* keep the model-facing collection small
 * keep the metadata stable
 * make reuse explicit
 * hide curation complexity behind a profile
@@ -110,11 +115,11 @@ Those are parallel ideas.
 
 I think that is a strong sign the design is on the right track.
 
-## 4. A better mental model: `destilar` produces a question-shaped corpus
+## 4. A better mental model: `destilar` produces a question-shaped collection
 
 I would describe the output not merely as an archive, but as a:
 
-> **question-shaped source corpus**
+> **question-shaped source collection**
 
 That phrase matters because it explains why the profile exists.
 
@@ -135,7 +140,7 @@ Instead of spending 10 turns on:
 * “why is the repo large?”
 * “which files define the call path?”
 
-the first turn can begin with a curated corpus plus supporting manifests.
+the first turn can begin with a curated collection plus supporting manifests.
 
 That is a substantial gain.
 
@@ -187,7 +192,7 @@ For example:
 [analysis]
 intent = "trace_llama_server_execution_path"
 questions = [
-  "How does an OpenAI-compatible request reach llama_decode()?",
+  "How does an OpenAI-compatible request reach llama_decode()?,"
   "Where is the GPU compute graph executed?",
   "How is KV cache placement handled?"
 ]
@@ -240,7 +245,7 @@ I think there is a very natural future connection to the runtime design.
 
 Your runtime wants plugins representing bounded contexts like `repo`, `web`, and `memory`, with token-efficient handles and a small model-facing surface.
 
-A future `repo` plugin could use `destilar` outputs as a first-class corpus.
+A future `repo` plugin could use `destilar` outputs as a first-class collection.
 
 Something like:
 
@@ -255,7 +260,7 @@ repo.read_chunk(handle, path, offset, limit)
 → reads from distilled source corpus
 
 repo.find(handle, pattern)
-→ queries curated corpus rather than full repo
+→ queries curated collection rather than full repo
 ```
 
 That would be powerful because it would let the runtime operate on:
@@ -276,13 +281,13 @@ Why?
 
 Because on a local 24 GB system, even if the nominal context window is large, **effective cognitive budget still matters**. Your runtime architecture explicitly treats token efficiency as a first-order design constraint for `gpt-oss-20b` on consumer GPUs.
 
-A distilled corpus does three things:
+A distilled collection does three things:
 
 * reduces prompt overhead
 * reduces reasoning distraction
 * increases the chance that the model’s limited working attention stays on the relevant path
 
-So even when a model can technically fit a large corpus, distillation still improves quality.
+So even when a model can technically fit a large collection, distillation still improves quality.
 
 This is analogous to the OpenCode tool-schema work: even if the model can process the full schema, reducing redundant overhead still helps.
 
