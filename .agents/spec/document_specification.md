@@ -124,8 +124,8 @@ in the governed document.
 
 ## ContentPreservationInvariant
 
-- When producing revision `rN+1` from revision `rN`, all content from `rN` MUST be preserved unless the user explicitly authorizes its removal or replacement.
-- Compression, summarization, abbreviation, or omission of prior content counts as removal unless explicitly authorized.
+- `diff(rN, rN+1)` MUST contain no deletions unless each deleted span is explicitly authorized for removal in the current revision event.
+- Compression, summarization, and abbreviation are deletions under this rule.
 
 ## AI Generation Contract
 
@@ -149,15 +149,14 @@ A finalized revision is correct if and only if:
 3. the `Timestamp` represents a plausible revision event
 4. the `Fingerprint` equals the SHA-256 digest of the document bytes with the
    `Fingerprint` header row removed
-5. the revision is content-complete relative to the prior revision unless the
-   user explicitly authorized removal or replacement
+5. `diff(rN, rN+1)` contains no deletions unless each deleted span is explicitly authorized
 6. the canonical validator has been executed successfully against the exact
    artifact to be delivered
 7. the artifact delivered is byte-identical to the artifact validated
 
 ValidatedArtifact := artifact for which `document_validate.py` returned success
 ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
-ContentComplete := all prior-revision content is preserved unless explicitly removed or replaced by user instruction
+ContentComplete := diff(rN, rN+1) contains no unauthorized deletions
 
 ```
 CorrectRevision := valid_structure ∧ consistent_metadata ∧ plausible_timestamp ∧ fingerprint_matches_bytes ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
