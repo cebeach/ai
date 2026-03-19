@@ -4,10 +4,10 @@
 |-------|-------|
 | DocumentName | style_plugin_architecture |
 | Role | specification |
-| Revision | r1 |
-| Fingerprint | 1876bbd4bb36e60fbd4419ab39e515214422fec253770b2c99c70b2fc77ff27f |
+| Revision | r2 |
+| Fingerprint | a570e05a9aecf57834f85a4390161d218fa3c3765da45946ea1aaef79be15be8 |
 | Status | draft |
-| Timestamp | 2026-03-18T01:30:09 |
+| Timestamp | 2026-03-18T17:59:18 |
 | Authors | ChatGPT |
 
 ## Purpose
@@ -74,12 +74,12 @@ System prompt assembly
 ## Style Invariants
 
 - StyleSelectionInvariant: When a style module is active responses MUST follow it unless doing so
-  would violate project_document_spec or project_instructions.
+  would violate document_specifications or project_instructions.
 - StyleBoundaryInvariant: Style rules modify presentation only and MUST NOT modify system behavior.
 - StyleConflictInvariant: If a style rule conflicts with a specification or instruction rule the
   higher authority rule overrides the style rule.
 - LexicalExclusionInvariant: Words listed in `BannedWords` MUST NOT appear in assistant-authored prose
-  except in exempt contexts defined by this architecture.
+  except in exempt contexts (quotations, code, filenames, identifiers, command tokens, required specification terms).
 
 ## Style Module Contract
 
@@ -119,17 +119,6 @@ Before finalizing output, the system MUST
 2. rewrite offending spans while preserving semantics
 3. validate absence before output
 
-### Conflict Rule
-
-- If avoiding a banned word would reduce correctness, distort quoted material, or violate required
-  specification terminology, correctness and fidelity take precedence.
-- In such cases the word MAY appear only in the minimal required context.
-
-### Boundary Rule
-
-- `BannedWords` is a presentation constraint only and MUST NOT modify specification authority,
-  command grammar, validation behavior, or revision semantics.
-
 ## Constraint Anchoring
 
 Immediately before generation the system SHOULD anchor both foundational and style invariants.
@@ -138,9 +127,6 @@ Example
 
 ConstraintAnchor
 
-- SpecAuthorityInvariant
-- ValidationInvariant
-- CommandProtocolInvariant
 - StyleSelectionInvariant
 - StyleBoundaryInvariant
 - LexicalExclusionInvariant

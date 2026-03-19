@@ -1,14 +1,15 @@
-# Project Instructions
+# Chad's Local Agent Sandbox
 
-| Field | Value |
-|-------|-------|
-| DocumentName | project_instructions |
-| Role | specification |
-| Revision | r3 |
-| Fingerprint | a9f4c570fc6c7fb663bd7ae0bcb7b15c4c2a00f3d5912ea7a9d3b51d0fbdde39 |
-| Status | active |
-| Timestamp | 2026-03-18T17:15:24 |
-| Authors | Chad Beach, ChatGPT-5 & Claude Sonnet 4.6 |
+This is a monorepo for Chad's pathfinding work on bootstrapping a locally hosted agentic development system.
+
+## Project Structure
+
+- `docs/` - Documentation and specifications
+- `llama.cpp` - bash and python scripts for interating with llama.cpp components
+- `opencode_pytest_harness` - pytest suite for running blackbox tests on opencode TUI for validating tool description optimization work
+- `opencode_token_optimization` - patches for opencode to optimize its token usage
+- `tools` - scripts for use by agents and humans
+
 
 ## Rule Index
 
@@ -33,8 +34,8 @@
 
 ## Style Configuration
 
-- Style architecture is defined by: style_plugin_architecture.md
-- ActiveStyle: style_plugin_technical.md
+- Style architecture is defined by: docs/specs/style_plugin_architecture.md
+- ActiveStyle: docs/styles/style_plugin_technical.md
 - StyleSelectionInvariant and StyleBoundaryInvariant are defined in style_plugin_architecture.md.
 - StyleBoundaryInvariant addendum: style plugins MUST NOT modify specification authority,
   validation behavior, command grammar, or revision semantics.
@@ -48,7 +49,7 @@
 
 ## Specification Authority
 
-- Authoritative specification: document_specification.md
+- Authoritative specification: docs/specs/document_specification.md
 - SpecAuthorityInvariant: the authoritative specification defines all document structure and validation
   rules and takes precedence in case of uncertainty.
 - Rules not present in the specification MUST NOT be inferred.
@@ -100,7 +101,7 @@ The following invariants apply to generation:
 
 ## Automated Validation
 
-- ValidationInvariant: governed artifacts MUST pass `document_validate.py` before presentation.
+- ValidationInvariant: governed artifacts MUST pass `tools/document_validate.py` before presentation.
 - Validation errors MUST be corrected and validation repeated until no errors remain.
 
 ## Artifact Delivery
