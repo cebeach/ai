@@ -3,11 +3,11 @@
 | Field | Value |
 |-------|-------|
 | DocumentName | llm_specification_engineering_guide |
-| Category | design-spec |
-| Revision | r8 |
-| Fingerprint | 7e45ad0008e8cb1c7183818b79fdceba9add40daeeff26f1c8e3d0895cdfff5d |
+| Role | guide |
+| Revision | r9 |
+| Fingerprint | a5782599608b5fccaf8e8c21f72382b23dcb7a8d8f741c07b5791d0241991e15 |
 | Status | draft |
-| Timestamp | 2026-03-16T21:59:54 |
+| Timestamp | 2026-03-18T19:53:20 |
 | Authors | Chad Beach, ChatGPT-5 & Claude Sonnet 4.6 |
 
 ## Purpose
@@ -37,6 +37,7 @@ This document consolidates practices for:
 - latency and cost constraints
 - failure-resistant specification structures
 - long-session conversation management
+
 
 ## Turns in Human–LLM Interaction
 

@@ -1,7 +1,22 @@
 # destilar design specification
 
-Revision: r10
-Timestamp: 2026-03-14T22:45:00Z
+| Field | Value |
+|-------|-------|
+| DocumentName | destilar_design_spec |
+| Role | specification |
+| Revision | r11 |
+| Fingerprint | e32bc1935415a4a14e82b4a5b4efcd5e262bbd8f3886fc4b803441be07e0c1a4 |
+| Status | draft |
+| Timestamp | 2026-03-18T15:41:30 |
+| Authors | Chad Beach |
+
+## RevisionDelta
+
+### r11
+
+- added: canonical header table (DocumentName, Role, Revision, Fingerprint, Status, Timestamp, Authors)
+- added: RevisionDelta section
+- removed: freeform `Revision:` and `Timestamp:` lines
 
 ## 1. Overview
 
