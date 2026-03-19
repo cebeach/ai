@@ -9,46 +9,28 @@
 
 All rules below are normative unless explicitly labeled Allowed.
 
-## Role Semantics
-
-- specification: normative rules
-- proposal: candidate design
-- plan: execution steps
-- status: progress report
-- guide: instructional content
-- vision: high-level direction
-
 ## Canonical Grammar
 
 ```
-letter := lowercase ASCII letter
-digit := ASCII digit
-digit_nonzero := "1"–"9"
+letter          := lowercase ASCII letter
+digit           := ASCII digit
+digit_nonzero   := "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
-word_initial := letter | digit
-word := word_initial { letter | digit }
-DocumentName := word { "_" word }
+word_initial    := letter | digit
+word            := word_initial { letter | digit }
+DocumentName    := word { "_" word }
 
 PositiveInteger := digit_nonzero { digit }
-Revision := "r" PositiveInteger
+Revision        := "r" PositiveInteger
 
-Filename := DocumentName "_" Revision ".md"
+Filename        := DocumentName ".md"
 
-Identifier := letter { letter | digit | "_" }
-Placeholder := "{" Identifier "}"
+Identifier      := letter { letter | digit | "_" }
+Placeholder     := "{" Identifier "}"
 
-FingerprintInput := UTF8(document bytes with the Fingerprint header row removed, including its trailing newline)
-Fingerprint := SHA256(FingerprintInput)
-
-Timestamp := YYYY "-" MM "-" DD "T" hh ":" mm ":" ss " UTC"
-
-RevisionEventTime := time at which the working revision bytes are finalized
-ValidationTime := time at which the canonical validator evaluates the document
+RoleValues      := specification | proposal | plan | status | guide | vision
+StatusValues    := draft | active | stable | superseded
 ```
-
-## Timestamp Semantics
-
-TimestampInvariant: `Timestamp` = output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime.
 
 ## Header
 
@@ -69,19 +51,20 @@ TimestampInvariant: `Timestamp` = output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` e
 
 Canonical order: `DocumentName`, `Role`, `Revision`, `Fingerprint`, `Status`, `Timestamp`, `Authors`.
 
-## Fingerprint Model
+## Role Semantics
 
-The fingerprint identifies a document revision by content.
+- specification: normative rules
+- proposal: candidate design
+- plan: execution steps
+- status: progress report
+- guide: instructional content
+- vision: high-level direction
 
-1. Start with the exact UTF-8 encoded bytes of the Markdown document.
-2. Locate the header row whose field name is `Fingerprint`.
-3. Remove the entire row, including its trailing newline character.
-4. Preserve all remaining bytes exactly without normalization or reformatting.
-5. Compute the SHA-256 hash of the resulting byte sequence.
-6. Write the computed fingerprint value into the `Fingerprint` field of the working file for that revision.
+## Header Field Invariants
 
 ```
-Fingerprint := SHA256(FingerprintInput)
+FingerprintInvariant := Fingerprint MUST be set to SHA256(UTF-8 bytes of the document with the Fingerprint header row removed, including its trailing newline) after producing or updating a revision
+TimestampInvariant   := Timestamp MUST be set to the output of date -u +"%Y-%m-%dT%H:%M:%S UTC" when producing or updating a revision
 ```
 
 ## RevisionDelta
@@ -127,11 +110,14 @@ in the governed document.
 ## Correctness Invariant
 
 ```
+ValidStructure := header fields present in canonical order, each exactly once, with correct surrounding blank lines, title line, no forbidden formatting, no angle-bracket placeholders, grammar and spelling rules satisfied, Markdown authored directly as UTF-8
+ConsistentMetadata := DocumentName matches filename ∧ Role ∈ RoleValues ∧ Revision matches grammar ∧ Status ∈ StatusValues ∧ FingerprintInvariant ∧ TimestampInvariant ∧ Authors present
+DeliveryProvenancePresent := delivery response identifies validator, target file, and validation result
 ValidatedArtifact := artifact for which `document_validate.py` returned success
 ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
 ContentComplete := diff(rN, rN+1) contains no unauthorized deletions
-CorrectRevision := valid_structure ∧ consistent_metadata ∧ TimestampInvariant ∧ fingerprint_matches_bytes ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
-DeliverableRevision := CorrectRevision ∧ validation_succeeded ∧ delivery_provenance_present
+CorrectRevision := ValidStructure ∧ ConsistentMetadata ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
+DeliverableRevision := CorrectRevision ∧ DeliveryProvenancePresent
 ```
 
 ## Placeholders
