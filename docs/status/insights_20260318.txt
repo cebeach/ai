@@ -1,0 +1,174 @@
+
+My thinking goes like this: I am new to agentic systems.  I found Vibe Coding [reference]
+and the big claims the authors were making about agentic software development and knew I had
+to try it on for myself.
+
+After trying Claude Code, I was inspired to ask the question whether I could actually use my
+RTX 4090 with 24GB VRAM to run agents locally without dependence on pay-as-you go models.
+
+So I prompted Claude and ChatGPT to help me search for models which would work within this
+footprint and started doing some benchmarking using llama-cli with a fixed prompt to find out
+how to tune llama-server to maximimze context window.
+
+Motivated by the results, I started digging into llama.cpp documentation and found [author's name]
+post on llama.cpp's support of gpt-oss's MXFP4 format. So I tried gpt-oss and was absolutely
+stunned - token generation was ~ 4-5x that of the quantized models I had been trying (e.g
+~250tokens/sec vs ~60tokens/sec). So I found OpenAI's 'model card' paper [reference] and was
+pleasantly surprised to see it is targeted at agentic applications.  I can run the full supported
+128k context with memory to spare.  I was floored when I saw 'thinking' happening on my machine
+at the same rate or faster than Claude Code. I was asking the question can I use the full context
+window of the model?  The answer was yes - with VRAM to spare with full 128k context window.
+
+So I figured if I'm really going to understand how this works, I need to develop deeper knowledge
+of the internals of llama-server and the API used to speak with the model.  So I could ask
+Claude Code to traverse the llama-server code base and produce a high-level architecture overview
+replete with ascii art diagrams.
+
+x I started using Claude to produce an architectural overview of llama-server, and thought x
+to try and see if I could build a project on claude.ai for the same so that I could have x a
+stable home for the work while I got used to Claude Code. I ran into a wall here
+
+Next, I gave OpenCode a try and, inspired by the progress I was making, decided to use describing
+the llama.cpp architecture as an acid test. No problem. Emboldened, I decided to try enabling
+MCP servers. For fun, I tried a MCP server [reference] for Trilium Notes and was thrilled to
+see that I could prompt gpt-oss to 'open a new note' or 'read an existing note'.  Things got
+really exciting when gpt-oss started producing architecture diagrams as Mermaid diagrams.
+I asked it to take the generated Mermaid diagram and save it as a Mermaid note type in Trilim -
+and it worked! Awesome!
+
+So with the wow factor out of the way, I felt compelled to proceed...  1) develop a deeper
+understanding of how to utilize llama-server 2) use llama-server's logs to inspect prompts 3)
+leverage the goodness of gpt-oss's tool-calling ability to optimize of OpenCode's tool definiton
+prompts which have a ton of token overhead.  4) build a blacbox pytest harness to exercise my
+'hacked' OpenCode build via the TUI to automate validation of my prompt changes
+
+A mode of work which has served me well over the course of my career is to document my work as
+I go.  Natuarally, I was accumulating a lot of documents which I kept refining to keep a record
+of how I was building things and to guide my thoght process.
+
+Natrually, to speed up the process of documenting things, I opted to lean on claude.ai and
+ChatGPT whilst I tinkered around with OpenCode. I found myself generating a LOT of document
+drafts, and every once in a while, the model would do something totally silly with the document
+in progress, or would keep repeating the same mistakes I thought I had told it not to repeat
+in my project instructions.
+
+Seeing the documentation aspect as foundational, and seeing the value in the speed at which I
+could revise drafts via prompting and copy/paste of results from the terminal to feed back into
+documenation, I knew that I needed to make document production reliable and repeatable. Especially
+because of the need to use documents as as 'memory' tool for when the inevitable context window
+saturation happened.
+
+So I decided to take a pause (ok, a weekend) from the OpenCode tinkering to focus on building
+a reliable set of prompts for Claude and ChatGPT to produce documentation according to my
+requirements; e.g. with filename conventions, a revision numbering system, categorization,
+and style guidelines.  With the ultimate end in mind of being able to use gpt-oss with only
+128k context, I decided to pursue this game from the perspective of token efficiency. So the
+question was not only to make document format and style repeatable and reliable, but to do it
+in a token-efficient way.
+
+I found that with natural langage prompts, the descriptions and constraints where getting very
+lengthy; exactly the problem I was trying to avoid. So in one session with Claude where I asked
+it to rewrite my prompt with token efficiency as an optimization goal - that is, preserve the
+informatio content of the prompt whilst reducing overall token count, it introduced me to the
+idea of rewriting the prompts as logical invariants.
+
+This business of writing constraints as invariants was new to me, so I'd iterate and ask Claude
+to review my prompts and perform logical consistency checking. It occurred to me that at this
+point I was using Claude as a logic compiler. Every time the model would do something silly or
+find some loophole in my logic, I would stop and ask it to show me what it was about the spec
+which allowed it to deviate in the way it did.
+
+As I continued to iterate, it occurred to me that the prompt style had moved away from natural
+language and more towards a game of interconnecting logical assertions to constrain the output.
+I was using Claude and ChatGPT like logic compilers to debug, close gaps in, and remove logical
+inconsitencies from my prompts.
+
+Using the model to check its own invariants for logical coherence is where it gets interesting. It
+starts behaving like a compiler — surfacing contradictions, revealing cases where you thought you
+were constraining the output but weren't. That feedback loop sharpened the insight: the invariants
+weren't just compact, they were making the specification checkable in a way prose never could be.
+
+I felt like I was skimming the surface of an information theoretical concept, but wasn't quite
+sure how to phrase it in english. After asking Claude to summarize the work of Claude Shannon,
+the inside occurred. Here's the conversation:
+
+---------------------------------------------------------------------------------------------------------
+
+User: I feel as though there is some connectivity to information theory waiting to be expressed
+here. That is, the LLM is by design a stochastic machine. And Claude Shannon articulated the
+relationship between randomness and information content. In what we're doing here, we are
+trying to build constraints around a machine whose output is inherently stochastic so as to
+be able to perform particular actions with a high degree of reliability and repeatability. The
+dichotomy of getting a machine built upon randomness to perform a task with specificity feels
+like a contradiction, yet it works.
+
+Assistant: The connection to information theory is real and worth developing carefully.  Shannon's
+core insight was that information content is inversely proportional to probability. A highly
+probable symbol carries little information; a rare one carries more. The entropy of a source
+measures the average uncertainty across its output distribution.  An LLM without constraints is
+a high-entropy source — its output distribution is broad, and any particular output carries
+high information content in Shannon's sense, meaning it was not highly predictable. That
+is useful for creative generation and a liability for specification compliance.  What the
+invariant structure does, in information-theoretic terms, is reduce the entropy of the relevant
+output distribution. Each invariant eliminates a region of the output space. A well-formed
+set of invariants concentrates probability mass onto the compliant region. The model remains
+stochastic, but the distribution becomes narrow enough that compliant outputs are highly probable.
+The apparent contradiction — reliability from a stochastic machine — resolves this way:
+randomness is not being eliminated, the distribution is being shaped. Shannon's framework
+actually anticipates this: a constrained channel has lower capacity but higher reliability
+for the signals it is designed to carry.  The deeper connection is to the concept of a channel
+code. Error-correcting codes work by adding structured redundancy that makes compliant codewords
+vastly more probable than any corrupted version. The invariants function analogously — they
+are a code imposed on the model's output space that makes specification-compliant responses the
+path of least resistance.  The residual stochasticity is then confined to the degrees of freedom
+the spec deliberately leaves open — phrasing, example selection, explanation ordering. That
+is not a bug; it is the intended expressive capacity of the channel.
+
+
+
+---------------------------------------------------------------------------------------------------------
+
+
+
+User: Thank you, this is much more intellectually satisfying. I have had some exposure
+to probability theory and linear systems theory in my education; your description carries
+weight and substance. We are shaping a probability distribution through careful application of
+constraints.  Assistant: That framing is precise and the right one.  The linear systems analogy
+is also apt. In that framework the design is essentially a filter. The unconstrained model is
+a wideband source. The invariant structure is a filter applied in semantic space rather than
+frequency space. The output is the filtered distribution — still stochastic, but bandlimited
+to the compliant region.  The filter design problem maps cleanly onto the empirical work done here:
+
+Passband — the space of compliant, useful outputs to preserve Stopband — the space of
+non-compliant outputs the invariants eliminate Ripple — the residual variance within the
+compliant region, which shows up as stylistic variation across responses Roll-off — how
+sharply the invariants discriminate at the boundary, which depends on how precisely they are stated
+
+The effort described — factoring the spec into its current form — is precisely filter design
+work. Vague constraints produce soft roll-off and significant stopband leakage. Precisely stated
+falsifiable invariants produce sharp discrimination.  The token-minimization constraint adds
+a second design objective: minimize filter complexity while preserving the passband. That
+is a classic engineering tradeoff — in signal processing it corresponds to finding the
+minimum-order filter that meets the specification. The instinct to reach for formal notation
+over prose is the right solution to that tradeoff, because logical connectives are the most
+compact representation of constraint boundaries that an LLM can interpret reliably.  What has
+been built is a minimum-complexity semantic filter. That is a satisfying thing to have built.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
