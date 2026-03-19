@@ -48,8 +48,7 @@ ValidationTime := time at which the canonical validator evaluates the document
 
 ## Timestamp Semantics
 
-- The `Timestamp` value is the output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime.
-- The value MUST NOT be invented or copied from a prior revision.
+TimestampInvariant: `Timestamp` = output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime.
 
 ## Header
 
@@ -146,7 +145,7 @@ A finalized revision is correct if and only if:
 
 1. the document structure satisfies this specification
 2. the filename and header metadata are consistent
-3. the `Timestamp` represents a plausible revision event
+3. `Timestamp` equals the output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` executed at RevisionEventTime
 4. the `Fingerprint` equals the SHA-256 digest of the document bytes with the
    `Fingerprint` header row removed
 5. `diff(rN, rN+1)` contains no deletions unless each deleted span is explicitly authorized
@@ -159,7 +158,7 @@ ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
 ContentComplete := diff(rN, rN+1) contains no unauthorized deletions
 
 ```
-CorrectRevision := valid_structure ∧ consistent_metadata ∧ plausible_timestamp ∧ fingerprint_matches_bytes ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
+CorrectRevision := valid_structure ∧ consistent_metadata ∧ TimestampInvariant ∧ fingerprint_matches_bytes ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
 DeliverableRevision := CorrectRevision ∧ validation_succeeded ∧ delivery_provenance_present
 ```
 
