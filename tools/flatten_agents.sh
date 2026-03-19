@@ -10,7 +10,7 @@
 set -euo pipefail
 
 # Configuration
-TARGET_DIR="agents_flat"
+TARGET_DIR="/tmp/agents_flat"
 SRC_DIR=".agents"
 
 # 1. Create target directory
