@@ -97,10 +97,15 @@ Fingerprint := SHA256(FingerprintInput)
 
 ## RevisionDelta
 
-Each revision MUST include a summary of changes:
-- added
-- modified
-- removed (explicitly listed)
+When producing a new revision, the system MUST report a summary of changes to the
+user in the delivery response. The summary MUST identify:
+
+- added content
+- modified content
+- removed content (explicitly listed)
+
+The summary is a response-turn artifact. It MUST NOT be embedded as a section
+in the governed document.
 
 ### Revision Snapshot Model
 
