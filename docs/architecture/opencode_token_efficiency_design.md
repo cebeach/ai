@@ -1,8 +1,14 @@
 # OpenCode Token Efficiency: Design and Methodology
 
-Revision: r2
-Timestamp: 2026-03-14 12:00:00
-
+| Field | Value |
+|-------|-------|
+| DocumentName | opencode_token_efficiency_design |
+| Role | guide |
+| Revision | r2 |
+| Fingerprint | 5cc0adc27aaf2fe98e60db69cd1af4053aac3f9909d968aff090b2d860427c56 |
+| Status | draft |
+| Timestamp | 2026-03-20T03:21:41 UTC |
+| Authors | Chad Beach, ChatGPT-5, Claude Sonnet 4.6 |
 
 ## 1. Purpose
 

@@ -1,7 +1,14 @@
-# llama-server Slots: Architecture, KV Cache, and Concurrency Model
+# llama_server_slots_brief
 
-Revision: r1
-Timestamp: 2026-03-13 22:45:00
+| Field | Value |
+|-------|-------|
+| DocumentName | llama_server_slots_brief |
+| Role | guide |
+| Revision | r1 |
+| Fingerprint | f2a7c86fc884d86911ae7394047a8666b4ce7a741b25e7e64ff446ce89a85b01 |
+| Status | draft |
+| Timestamp | 2026-03-20T03:16:56 UTC |
+| Authors | ChatGPT-5 |
 
 ## 1. Overview
 
