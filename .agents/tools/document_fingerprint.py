@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Update a governed Markdown document's Timestamp and Fingerprint in place.
 
-Rules implemented from project_document_spec_r21 and project_instructions_r34:
+Rules implemented from document_specification.md and AGENTS.md:
 - read the document as exact bytes
 - require UTF-8 without BOM
 - preserve all existing bytes and line endings exactly outside the updated rows

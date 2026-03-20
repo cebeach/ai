@@ -2,147 +2,57 @@
 
 ## Purpose
 
-- Machine-optimized version of the project document specification.
-- Preserves all normative rules while minimizing tokens.
+Machine-optimized normative rules for creating and managing versioned Markdown documents.
 
-## Interpretation
+## Document Names and Filenames
 
-All rules below are normative unless explicitly labeled Allowed.
-
-## Canonical Grammar
-
-```
-letter          := lowercase ASCII letter
-digit           := ASCII digit
-digit_nonzero   := "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-
-word_initial    := letter | digit
-word            := word_initial { letter | digit }
-DocumentName    := word { "_" word }
-
-PositiveInteger := digit_nonzero { digit }
-Revision        := "r" PositiveInteger
-
-Filename        := DocumentName ".md"
-
-Identifier      := letter { letter | digit | "_" }
-Placeholder     := "{" Identifier "}"
-
-RoleValues      := specification | proposal | plan | status | guide | vision
-StatusValues    := draft | active | stable | superseded
-```
+A document name is one or more lowercase alphanumeric words joined by underscores. The filename is the document name with a `.md` extension.
 
 ## Header
 
-- The header consists of a title line, blank line, header table, and blank line.
+The header consists of a title line, a blank line, the header table, and a blank line. Fields appear exactly once in this order: `DocumentName`, `Role`, `Revision`, `Fingerprint`, `Status`, `Timestamp`, `Authors`.
 
 ```
 | Field | Value |
 |-------|-------|
 ```
 
-- The header immediately follows the title.
-- Fields appear in canonical order.
-- Each field appears exactly once.
-- The header ends after the `Authors` row.
-- One blank line follows the table.
+## Field Rules
 
-## Canonical Header Fields
-
-Canonical order: `DocumentName`, `Role`, `Revision`, `Fingerprint`, `Status`, `Timestamp`, `Authors`.
-
-## Role Semantics
-
-- specification: normative rules
-- proposal: candidate design
-- plan: execution steps
-- status: progress report
-- guide: instructional content
-- vision: high-level direction
-
-## Header Field Invariants
-
-```
-FingerprintInvariant := Fingerprint MUST be set to SHA256(UTF-8 bytes of the document with the Fingerprint header row removed, including its trailing newline) after producing or updating a revision
-TimestampInvariant   := Timestamp MUST be set to the output of date -u +"%Y-%m-%dT%H:%M:%S UTC" when producing or updating a revision
-```
-
-## RevisionDelta
-
-When producing a new revision, the system MUST report a summary of changes to the
-user in the delivery response. The summary MUST identify:
-
-- added content
-- modified content
-- removed content (explicitly listed)
-
-The summary is a response-turn artifact. It MUST NOT be embedded as a section
-in the governed document.
-
-### Revision Snapshot Model
-
-- A finalized revision is an immutable snapshot of document state.
-- The fingerprint is the content-derived identifier of that snapshot.
-
-## Markdown Production
-
-- Author Markdown directly as UTF-8 text.
-- Source Markdown is the primary artifact.
-- Pandoc, pypandoc, document conversion pipelines, tools that rewrite Markdown structure, and generating Markdown from host-language string literals are prohibited.
-
-## ContentPreservationInvariant
-
-- `diff(rN, rN+1)` MUST contain no deletions unless each deleted span is explicitly authorized for removal in the current revision event.
-- Compression, summarization, and abbreviation are deletions under this rule.
-
-## AI Generation Contract
-
-- generate draft → validate → fix violations → repeat until pass
-
-## ValidationInvariant
-
-- Before presentation or delivery, the system MUST execute `document_validate.py` against the exact artifact to be delivered.
-- Any errors reported by the canonical validator MUST be treated as specification violations.
-- Validator success is necessary but not sufficient for correctness.
-- The delivery response MUST include validation evidence identifying the validator used, the target file validated, and the validation result.
-- The artifact delivered MUST be byte-identical to the artifact validated; any modification after a successful validator run requires re-validation.
-
-## Correctness Invariant
-
-```
-ValidStructure := header fields present in canonical order, each exactly once, with correct surrounding blank lines, title line, no forbidden formatting, no angle-bracket placeholders, grammar and spelling rules satisfied, Markdown authored directly as UTF-8
-ConsistentMetadata := DocumentName matches filename ∧ Role ∈ RoleValues ∧ Revision matches grammar ∧ Status ∈ StatusValues ∧ FingerprintInvariant ∧ TimestampInvariant ∧ Authors present
-DeliveryProvenancePresent := delivery response identifies validator, target file, and validation result
-ValidatedArtifact := artifact for which `document_validate.py` returned success
-ByteIdentity := SHA256(delivered_bytes) = SHA256(validated_bytes)
-ContentComplete := diff(rN, rN+1) contains no unauthorized deletions
-CorrectRevision := ValidStructure ∧ ConsistentMetadata ∧ ContentComplete ∧ ValidatedArtifact ∧ ByteIdentity
-DeliverableRevision := CorrectRevision ∧ DeliveryProvenancePresent
-```
-
-## Placeholders
-
-- `{identifier}`
-- Angle-bracket placeholders are prohibited outside fenced code blocks, indented code blocks, and inline code.
+| Field | Rule |
+|-------|------|
+| DocumentName | Must match the filename (without `.md`) |
+| Role | One of: `specification`, `proposal`, `plan`, `status`, `guide`, `vision` |
+| Revision | Format `rN` where N is a positive integer, starting at `r1`, incrementing monotonically |
+| Fingerprint | SHA-256 of the UTF-8 document bytes with the Fingerprint row (including its trailing newline) removed |
+| Status | One of: `draft`, `active`, `stable`, `superseded` |
+| Timestamp | Output of `date -u +"%Y-%m-%dT%H:%M:%S UTC"` at the time of producing or updating the revision |
+| Authors | One or more author names |
 
 ## Revision Model
 
-- Documents are managed as versioned artifacts.
-- Each revision corresponds to a distinct document file.
-- Revisions start at `r1` and increase monotonically.
-- The revision identifier appears in the header.
+Each revision is an immutable snapshot. Revisions increment monotonically from `r1`. When delivering a new revision, the response must include a change summary identifying added, modified, and removed content. This summary belongs in the response only — never embedded in the document.
+
+## Content Preservation
+
+A diff between rN and rN+1 must contain no deletions unless each deleted span is explicitly authorized for removal in the current revision event. Compression, summarization, and abbreviation count as deletions.
+
+## Markdown Authoring
+
+Author Markdown directly as UTF-8 text. Pandoc, pypandoc, conversion pipelines, and generating Markdown from host-language string literals are prohibited.
+
+## Validation and Delivery
+
+Before delivery, run `document_validate.py` against the exact artifact to be delivered. The delivery response must identify the validator used, the file validated, and the result. The delivered file must be byte-identical to the validated file. Any modification after a successful validator run requires re-validation. Validator success is necessary but not sufficient for correctness.
+
+## AI Generation Contract
+
+Generate draft → validate → fix violations → repeat until the validator passes.
 
 ## Formatting
 
-- Sections MUST be separated by blank lines.
-- Horizontal rules are prohibited.
-- Trailing backslash escapes (`\`) are allowed only in fenced code blocks, indented code blocks, and inline code.
+Sections must be separated by blank lines. Horizontal rules are prohibited. Trailing backslash escapes are allowed only inside fenced code blocks, indented code blocks, and inline code. Angle-bracket placeholders are prohibited outside code blocks. Placeholders use the form `{identifier}`.
 
-## Spelling
+## Spelling and Grammar
 
-- Use American English.
-
-## Grammar Invariant
-
-- Documents MUST consist of grammatically correct and semantically complete sentences.
-- Documents containing grammatical errors, incomplete sentences, omitted required terms, or unresolved placeholders MUST be rejected and revised until no such issues remain.
+Use American English. Documents must consist of grammatically correct and semantically complete sentences. Documents with grammatical errors, incomplete sentences, or unresolved placeholders must be rejected and revised until clean.

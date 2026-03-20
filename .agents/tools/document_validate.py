@@ -361,7 +361,7 @@ def print_result(result: ValidationResult) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate governed Markdown documents against project_document_spec_r27.md"
+        description="Validate governed Markdown documents against document_specification.md"
     )
     parser.add_argument(
         "paths",
