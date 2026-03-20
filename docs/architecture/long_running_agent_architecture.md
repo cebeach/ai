@@ -5,9 +5,9 @@
 | DocumentName | long_running_agent_architecture |
 | Category | design-spec |
 | Revision | r2 |
-| Fingerprint | cc5e6de9bd148ac057ccaba7df1d483c0d7dded2cc4d16f6b8522ba25ffa2b58 |
+| Fingerprint | 65332568f4ec79a6b2d3a4109dd8e9cdf0d3d4078674e5340d102feca96a8dec |
 | Status | draft |
-| Timestamp | 2026-03-16T20:24:32 |
+| Timestamp | 2026-03-20T03:20:00 UTC |
 | Authors | Chad Beach & Claude Sonnet 4.6 |
 
 ## 1. Objective

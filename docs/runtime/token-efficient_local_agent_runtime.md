@@ -1,6 +1,14 @@
-# token-efficient_local_agent_runtime_r3.md
-Revision: r3
-Date: 2026-03-14T00:00:00Z
+# token-efficient_local_agent_runtime
+
+| Field | Value |
+|-------|-------|
+| DocumentName | token-efficient_local_agent_runtime |
+| Role | guide |
+| Revision | r3 |
+| Fingerprint | 8c9b64fccfe3092d4660a128eef41add6f9a0c7b1fef4521c13a47a4e4d4dfda |
+| Status | draft |
+| Timestamp | 2026-03-20T03:29:45 UTC |
+| Authors | Chad Beach, ChatGPT-5, Claude Sonnet 4.6 |
 
 ## 1. Purpose
 

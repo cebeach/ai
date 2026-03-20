@@ -5,9 +5,9 @@
 | DocumentName | bpe_tokenizer_tools_plan |
 | Category | design-spec |
 | Revision | r3 |
-| Fingerprint | 88170fe82bdf711232a65ad2f07961c7f33e7cc7ac89a32602165fbf2f0431a6 |
+| Fingerprint | b4566dc18ca4cf1d4e82bf1c28d31c773456d1d4d17a853ddfc2ca001ed96fc3 |
 | Status | draft |
-| Timestamp | 2026-03-17T16:45:11 |
+| Timestamp | 2026-03-20T03:25:34 UTC |
 | Authors | Chad Beach & ChatGPT-5 |
 
 ## Purpose

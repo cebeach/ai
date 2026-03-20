@@ -1,5 +1,15 @@
 ## Local AI Coding Agent: Hardware & Software Design
 
+| Field | Value |
+|-------|-------|
+| DocumentName | local_ai_agent_design |
+| Role | guide |
+| Revision | r1 |
+| Fingerprint | 429125f07e617d7560c95a7d94189ed614585b513ee1807278feef3a58ba1b34 |
+| Status | draft |
+| Timestamp | 2026-03-20T03:24:44 UTC |
+| Authors | Chad Beach, Claude Sonnet 4.6 |
+
 ### Design Reference | March 2026 | r109
 
 *Drafted with Claude Sonnet 4.6 (Anthropic) as a collaborative research and drafting assistant.*

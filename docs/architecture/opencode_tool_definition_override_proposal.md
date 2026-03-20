@@ -5,10 +5,10 @@
 | DocumentName | opencode_tool_definition_override_proposal |
 | Category | design-spec |
 | Revision | r1 |
-| Fingerprint | ae39ce269a6001a0a3796ed02e2a97cc834038f1b8a753a9a61117e2786d545b |
+| Fingerprint | ea26e4bdf4356163cbd134a585b33cb52d509bab9bf54d05a336b7cabee46b69 |
 | Status | draft |
-| Timestamp | 2026-03-17T14:44:54 |
-| Authors | ChatGPT |
+| Timestamp | 2026-03-20T03:22:49 UTC |
+| Authors | Chad Beach, ChatGPT-5 |
 
 ## Purpose
 

@@ -1,7 +1,14 @@
 # OpenCode: Startup Directory Semantics Fix Proposal
 
-Revision: r3
-Timestamp: 2026-03-14 08:30:00
+| Field | Value |
+|-------|-------|
+| DocumentName | opencode_startup_directory_fix_proposal |
+| Role | proposal |
+| Revision | r3 |
+| Fingerprint | 511311969b28fecfb851b27f14ff82ec65683441fe01b176c06a36c14dbbb7f7 |
+| Status | draft |
+| Timestamp | 2026-03-20T03:27:03 UTC |
+| Authors | Chad Beach, ChatGPT-5, Claude Sonnet 4.6 |
 
 ## 1. Summary
 
