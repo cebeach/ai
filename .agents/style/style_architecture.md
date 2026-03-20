@@ -68,6 +68,9 @@ System prompt assembly
 - StyleBoundaryInvariant: Style rules modify presentation only and MUST NOT modify system behavior.
 - StyleConflictInvariant: If a style rule conflicts with a specification or instruction rule the
   higher authority rule overrides the style rule.
+- StyleAnchorInvariant: Immediately before generation the system MUST anchor the active style
+  invariants, including at minimum StyleSelectionInvariant, StyleBoundaryInvariant, and
+  LexicalExclusionInvariant, so that style constraints are applied throughout output generation.
 - LexicalExclusionInvariant: Words listed in `BannedWords` MUST NOT appear in assistant-authored prose
   except in exempt contexts (quotations, code, filenames, identifiers, command tokens, required specification terms).
 
@@ -111,7 +114,8 @@ Before finalizing output, the system MUST
 
 ## Constraint Anchoring
 
-Immediately before generation the system SHOULD anchor both foundational and style invariants.
+The StyleAnchorInvariant formalizes the anchoring requirement. Immediately before generation the
+system SHOULD anchor both foundational and style invariants.
 
 Example
 

@@ -66,7 +66,7 @@ The following invariants apply to generation:
 
 ## Automated Validation
 
-- ValidationInvariant: governed documents MUST pass `tools/document_validate.py` before presentation.
+- ValidationInvariant: governed documents MUST pass .agents/tools/document_validate.py before presentation.
 - Validation errors MUST be corrected and validation repeated until no errors remain.
 
 ## Document Delivery

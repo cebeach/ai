@@ -28,6 +28,8 @@ find "$SRC_DIR" -type f -exec cp {} "$TARGET_DIR/" \;
 find "$TARGET_DIR" -type f -exec \
   sed -i -e 's/\.agents\/style\///g' \
         -e 's/\.agents\/spec\///g' \
+        -e 's/\.agents\/tools\///g' \
+        -e 's/AGENTS.md/project instructions/g' \
         {} \;
 
 echo "Done. All files are in '$TARGET_DIR'."
