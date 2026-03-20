@@ -10,8 +10,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_OPENCODE_BIN = PROJECT_ROOT / "latest" / "packages/opencode/dist/opencode-linux-x64/bin/opencode"
-
+DEFAULT_OPENCODE_BIN = Path.home() / ".opencode/bin/opencode"
 
 def load_case(case_path: Path) -> dict:
     with case_path.open("r", encoding="utf-8") as handle:

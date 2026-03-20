@@ -8,10 +8,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-# PROJECT_ROOT/opencode_build should be a symbolic link to your target opencode build (source) directory
-DEFAULT_OPENCODE_BIN = (
-    PROJECT_ROOT / "opencode_build" / "packages/opencode/dist/opencode-linux-x64/bin/opencode"
-)
+DEFAULT_OPENCODE_BIN = Path.home() / ".opencode/bin/opencode"
 
 # llama-server base URL, overridable via environment variable
 DEFAULT_LLAMA_SERVER_URL = "http://127.0.0.1:8001"
